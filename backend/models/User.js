@@ -20,8 +20,9 @@ const UserSchema = new mongoose.Schema(
   {
     rollNo: {
       type:     String,
-      required: [true, 'Roll number is required'],
+      required: function() { return this.role === 'Student'; },
       unique:   true,
+      sparse:   true,
       trim:     true,
       uppercase: true,
     },
@@ -33,7 +34,10 @@ const UserSchema = new mongoose.Schema(
       lowercase: true,
       trim:     true,
       validate: {
-        validator: (v) => INSTITUTE_EMAIL_REGEX.test(v),
+        validator: function(v) {
+          if (this.role === 'Student') return INSTITUTE_EMAIL_REGEX.test(v);
+          return /@([a-z]+\.)?nitrr\.ac\.in$/i.test(v);
+        },
         message:   (p) => `${p.value} is not a valid NITRR institute email`,
       },
     },

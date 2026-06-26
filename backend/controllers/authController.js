@@ -46,12 +46,15 @@ exports.register = async (req, res) => {
     const { rollNo, instituteEmail, password, role, displayName } = req.body;
 
     // Check for duplicate email or roll number
-    const existing = await User.findOne({
-      $or: [{ instituteEmail: instituteEmail?.toLowerCase() }, { rollNo: rollNo?.toUpperCase() }],
-    });
+    const query = [{ instituteEmail: instituteEmail?.toLowerCase() }];
+    if (rollNo) {
+      query.push({ rollNo: rollNo?.toUpperCase() });
+    }
+
+    const existing = await User.findOne({ $or: query });
 
     if (existing) {
-      const field = existing.rollNo === rollNo?.toUpperCase() ? 'Roll number' : 'Email';
+      const field = existing.rollNo && rollNo && existing.rollNo === rollNo.toUpperCase() ? 'Roll number' : 'Email';
       return res.status(409).json({
         success: false,
         message: `${field} already registered.`,
@@ -60,7 +63,7 @@ exports.register = async (req, res) => {
 
     // passwordHash field triggers the pre-save bcrypt hook in User model
     const user = await User.create({
-      rollNo:         rollNo.toUpperCase(),
+      rollNo:         rollNo ? rollNo.toUpperCase() : undefined,
       instituteEmail: instituteEmail.toLowerCase(),
       passwordHash:   password,       // Hook will hash this
       role:           role || 'Student',
