@@ -145,7 +145,7 @@ const UserProfilePage = () => {
               {canFollow && (
                 <div><span className="font-semibold">{profileUser.followers?.length || 0}</span> followers</div>
               )}
-              {profileUser.rollNo && (
+              {profileUser.rollNo && profileUser.role === 'Student' && (
                 <div className="text-gray-500">{profileUser.rollNo}</div>
               )}
               <div className="text-gray-500 capitalize">{profileUser.role}</div>

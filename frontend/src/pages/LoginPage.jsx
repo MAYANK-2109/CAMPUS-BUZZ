@@ -84,7 +84,9 @@ const LoginPage = () => {
 
             {mode === 'register' && (
               <>
-                <input className="input-base" name="rollNo" value={form.rollNo} onChange={handleChange} placeholder="Roll Number (e.g. 22BCE001)" required />
+                {form.role === 'Student' && (
+                  <input className="input-base" name="rollNo" value={form.rollNo} onChange={handleChange} placeholder="Roll Number (e.g. 22BCE001)" required />
+                )}
                 <input className="input-base" name="displayName" value={form.displayName} onChange={handleChange} placeholder="Display Name" required />
                 <select className="input-base" name="role" value={form.role} onChange={handleChange}>
                   <option value="Student">Student</option>

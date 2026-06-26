@@ -95,7 +95,9 @@ const ProfilePage = () => {
             
             <div className="flex items-center gap-6 mb-4 text-sm">
               <div><span className="font-semibold">{posts.length}</span> posts</div>
-              <div className="text-gray-500">{user.rollNo}</div>
+              {user.rollNo && user.role === 'Student' && (
+                <div className="text-gray-500">{user.rollNo}</div>
+              )}
               <div className="text-gray-500 capitalize">{user.role}</div>
             </div>
             
