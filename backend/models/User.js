@@ -84,6 +84,14 @@ const UserSchema = new mongoose.Schema(
     following: [
       { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
     ],
+
+    /**
+     * savedPosts: private bookmarks. Only the owning user can read this list.
+     * Toggled via POST /api/posts/:id/save.
+     */
+    savedPosts: [
+      { type: mongoose.Schema.Types.ObjectId, ref: 'Post' }
+    ],
   },
   {
     timestamps: true,   // createdAt, updatedAt

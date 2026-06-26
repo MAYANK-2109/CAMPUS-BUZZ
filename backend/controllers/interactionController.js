@@ -167,3 +167,63 @@ exports.followClub = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed.' });
   }
 };
+
+// ── POST /api/posts/:id/save ──────────────────────────────────────────────────
+/**
+ * Toggle-save a post for the authenticated user.
+ * Saved posts are stored privately in User.savedPosts — not visible to others.
+ * Returns { saved: boolean } indicating the new state.
+ */
+exports.toggleSavePost = async (req, res) => {
+  try {
+    const postId = req.params.id;
+    const userId = req.user._id;
+
+    // Confirm the post exists and is active
+    const post = await Post.findById(postId).select('_id isActive');
+    if (!post || !post.isActive) {
+      return res.status(404).json({ success: false, message: 'Post not found.' });
+    }
+
+    const user = await User.findById(userId).select('savedPosts');
+    const alreadySaved = user.savedPosts.map(id => id.toString()).includes(postId.toString());
+
+    if (alreadySaved) {
+      await User.findByIdAndUpdate(userId, { $pull: { savedPosts: postId } });
+      return res.status(200).json({ success: true, saved: false });
+    } else {
+      await User.findByIdAndUpdate(userId, { $addToSet: { savedPosts: postId } });
+      return res.status(200).json({ success: true, saved: true });
+    }
+  } catch (err) {
+    console.error('[interactionController.toggleSavePost]', err);
+    return res.status(500).json({ success: false, message: 'Failed to save post.' });
+  }
+};
+
+// ── GET /api/users/me/saved ───────────────────────────────────────────────────
+/**
+ * Return the authenticated user's private saved posts list.
+ * Ordered by save-time (newest first via reverse).
+ * No user-ID param — strictly self-only, no way to peek at others' saves.
+ */
+exports.getSavedPosts = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .select('savedPosts')
+      .populate({
+        path:     'savedPosts',
+        match:    { isActive: true },   // Don't surface expired/deleted posts
+        populate: { path: 'author', select: 'displayName role instituteEmail rollNo avatarUrl' },
+      });
+
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+    // Return in reverse order (most recently saved first)
+    const saved = [...(user.savedPosts || [])].reverse();
+    return res.status(200).json({ success: true, data: saved });
+  } catch (err) {
+    console.error('[interactionController.getSavedPosts]', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch saved posts.' });
+  }
+};

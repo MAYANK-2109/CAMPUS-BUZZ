@@ -72,6 +72,7 @@ router.delete('/posts/:id', protect, postController.deletePost);
 // Post interactions
 router.post('/posts/:id/like',        protect, interactionController.toggleLike);
 router.post('/posts/:id/dislike',     protect, interactionController.toggleDislike);
+router.post('/posts/:id/save',        protect, interactionController.toggleSavePost);
 router.get('/posts/:id/comments',     protect, interactionController.getComments);
 router.post('/posts/:id/comments',    protect, interactionController.addComment);
 router.post('/users/:id/follow',      protect, interactionController.followClub);
@@ -122,8 +123,52 @@ router.get('/clubs', protect, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
+// CHAT ROOM routes  (/api/chat-rooms/…)
+// ════════════════════════════════════════════════════════════════════════════════
+/**
+ * PATCH /api/chat-rooms/:postId/close
+ *   Closes the chat room for a post. Only the post author or an Admin can call this.
+ *   The room is deactivated (isActive = false); the post itself is NOT deleted.
+ */
+const ChatRoom = require('../models/ChatRoom');
+router.patch('/chat-rooms/:postId/close', protect, async (req, res) => {
+  try {
+    const Post = require('../models/Post');
+    const post = await Post.findById(req.params.postId);
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found.' });
+    }
+
+    const isAuthor = post.author.toString() === req.user._id.toString();
+    if (!isAuthor && req.user.role !== 'Admin') {
+      return res.status(403).json({ success: false, message: 'Only the post author can close this room.' });
+    }
+
+    const room = await ChatRoom.findOne({ postId: req.params.postId });
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Chat room not found.' });
+    }
+    if (!room.isActive) {
+      return res.status(400).json({ success: false, message: 'Room is already closed.' });
+    }
+
+    room.isActive = false;
+    await room.save();
+
+    return res.status(200).json({ success: true, message: 'Chat room closed.' });
+  } catch (err) {
+    console.error('[chat-rooms/close]', err);
+    return res.status(500).json({ success: false, message: 'Failed to close chat room.' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
 // USER routes  (/api/users/…)
 // ════════════════════════════════════════════════════════════════════════════════
+// NOTE: /users/me/* routes must be registered BEFORE router.use('/users', userRoutes)
+// so that 'me' is not matched as a MongoDB ObjectId by the /:id param.
+router.get('/users/me/saved', protect, interactionController.getSavedPosts);
+
 router.use('/users', userRoutes);
 
 // ════════════════════════════════════════════════════════════════════════════════

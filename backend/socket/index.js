@@ -206,6 +206,53 @@ const initSocket = (httpServer) => {
       }
     });
 
+    // ── closeRoom ─────────────────────────────────────────────────────────────
+    socket.on('closeRoom', async ({ postId }) => {
+      try {
+        if (!postId) {
+          return socket.emit('roomError', { message: 'postId is required to close a room.' });
+        }
+
+        // Verify the post exists
+        const post = await Post.findById(postId).populate('author', '_id');
+        if (!post) {
+          return socket.emit('roomError', { message: 'Post not found.' });
+        }
+
+        // Only the post author can close the room
+        if (post.author._id.toString() !== socket.user._id.toString()) {
+          return socket.emit('roomError', { message: 'Only the post author can close this room.' });
+        }
+
+        // Find the chat room
+        const room = await ChatRoom.findOne({ postId });
+        if (!room) {
+          return socket.emit('roomError', { message: 'Chat room not found.' });
+        }
+        if (!room.isActive) {
+          return socket.emit('roomError', { message: 'Room is already closed.' });
+        }
+
+        // Deactivate the room
+        room.isActive = false;
+        await room.save();
+
+        // Broadcast to ALL users in the room (including the poster)
+        io.to(postId).emit('roomClosed', {
+          postId,
+          closedBy: socket.user.displayName,
+          message:  `Room closed by ${socket.user.displayName}.`,
+        });
+
+        console.log(
+          `[Socket] Room ${postId} closed by ${socket.user.displayName}`
+        );
+      } catch (err) {
+        console.error('[Socket closeRoom error]', err);
+        socket.emit('roomError', { message: 'Failed to close room. Please try again.' });
+      }
+    });
+
     // ── disconnect ────────────────────────────────────────────────────────────
     socket.on('disconnect', (reason) => {
       console.log(

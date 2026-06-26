@@ -4,10 +4,10 @@
  * Instagram-inspired post card with likes, dislikes, comments, hashtag actions.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router-dom';
-import { Heart, ThumbsDown, MessageCircle, Trash2, Send, MoreHorizontal } from 'lucide-react';
+import { Heart, ThumbsDown, MessageCircle, Trash2, Bookmark, Share2 } from 'lucide-react';
 import HashtagBadge   from './HashtagBadge';
 import CountdownTimer from './CountdownTimer';
 import ContactModal   from './ContactModal';
@@ -30,6 +30,10 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
   const [deleting,     setDeleting]     = useState(false);
   const [liking,       setLiking]       = useState(false);
   const [disliking,    setDisliking]    = useState(false);
+  const [roomClosed,   setRoomClosed]   = useState(false);
+  const [isSaved,      setIsSaved]      = useState(false);
+  const [saving,       setSaving]       = useState(false);
+  const [shareToast,   setShareToast]   = useState(false);
 
   const userId      = user?._id;
   const isAuthor    = userId === post.author?._id;
@@ -91,13 +95,56 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
     else if (CONTACT_HASHTAGS.has(post.hashtag)) setShowContact(true);
   };
 
-  const ctaLabel = {
+  // ── Save (bookmark) ────────────────────────────────────────────────────
+  const handleSave = useCallback(async () => {
+    if (saving) return;
+    // Optimistic toggle
+    setIsSaved(prev => !prev);
+    setSaving(true);
+    try {
+      const { data } = await api.post(`/posts/${post._id}/save`);
+      setIsSaved(data.saved);
+    } catch (err) {
+      // Revert on failure
+      setIsSaved(prev => !prev);
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  }, [post._id, saving]);
+
+  // ── Share (copy link) ───────────────────────────────────────────────
+  const handleShare = useCallback(async () => {
+    const url = `${window.location.origin}/feed?post=${post._id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: post.title, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setShareToast(true);
+        setTimeout(() => setShareToast(false), 2000);
+      }
+    } catch (err) {
+      // User cancelled share or clipboard unavailable
+      console.error(err);
+    }
+  }, [post._id, post.title]);
+
+  const ctaLabel = roomClosed ? null : ({
     '#foodsplit': '🍕 Join Foodsplit',
     '#cabsplit':  '🚕 Join Cabsplit',
     '#resell':    'Chat to Buy',
     '#lost':      'View Contact',
     '#found':     'View Contact',
-  }[post.hashtag] || null;
+  }[post.hashtag] || null);
+
+  const ctaClosedLabel = roomClosed ? (
+    {
+      '#foodsplit': 'Order Closed 🔒',
+      '#cabsplit':  'Ride Full 🔒',
+      '#resell':    'Sold 🔒',
+    }[post.hashtag] || null
+  ) : null;
 
   const isExpired = post.expiresAt && new Date(post.expiresAt) < new Date();
 
@@ -226,18 +273,68 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
               </span>
             </button>
 
-            {/* CTA */}
+            {/* CTA — three mutually-exclusive states */}
             {ctaLabel && !isExpired && (
               <button
                 onClick={handleHashtagAction}
-                className="ml-auto text-xs font-semibold px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full transition-colors"
+                className="text-xs font-semibold px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full transition-colors"
               >
                 {ctaLabel}
               </button>
             )}
-            {ctaLabel && isExpired && (
-              <span className="ml-auto text-xs text-gray-400 italic">Expired</span>
+            {ctaClosedLabel && (
+              <span className="text-xs text-gray-400 font-semibold italic">
+                {ctaClosedLabel}
+              </span>
             )}
+            {!roomClosed && isExpired && (ctaLabel || post.hashtag !== 'None') && (
+              <span className="text-xs text-gray-400 italic">Expired</span>
+            )}
+
+            {/* ── Right-side actions: Share + Save ─────────────────────────── */}
+            <div className="ml-auto flex items-center gap-2">
+              {/* Share */}
+              <div className="relative">
+                <button
+                  onClick={handleShare}
+                  className="p-1.5 group transition-transform active:scale-90 rounded-full hover:bg-gray-100"
+                  aria-label="Share post"
+                  title="Copy link"
+                >
+                  <Share2 className="w-5 h-5 text-gray-500 group-hover:text-blue-500 transition-colors" />
+                </button>
+                {/* Clipboard toast */}
+                {shareToast && (
+                  <span
+                    className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap
+                               text-[11px] font-medium bg-gray-900 text-white px-2.5 py-1
+                               rounded-full shadow-lg pointer-events-none
+                               animate-[fadeIn_0.15s_ease_forwards]"
+                  >
+                    🔗 Link copied!
+                  </span>
+                )}
+              </div>
+
+              {/* Save (Bookmark) */}
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className={`p-1.5 group transition-transform active:scale-90 rounded-full hover:bg-amber-50 ${
+                  saving ? 'opacity-50' : ''
+                }`}
+                aria-label={isSaved ? 'Unsave post' : 'Save post'}
+                title={isSaved ? 'Unsave' : 'Save'}
+              >
+                <Bookmark
+                  className={`w-5 h-5 transition-all duration-150 ${
+                    isSaved
+                      ? 'fill-amber-500 text-amber-500 scale-110'
+                      : 'text-gray-500 group-hover:text-amber-500'
+                  }`}
+                />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -272,7 +369,14 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
       </article>
 
       {showChat && (
-        <ChatRoom postId={post._id} postTitle={post.title} hashtag={post.hashtag} onClose={() => setShowChat(false)} />
+        <ChatRoom
+          postId={post._id}
+          postTitle={post.title}
+          hashtag={post.hashtag}
+          isAuthor={isAuthor}
+          onClose={() => setShowChat(false)}
+          onRoomClosed={() => { setRoomClosed(true); setShowChat(false); }}
+        />
       )}
       {showContact && (
         <ContactModal post={post} onClose={() => setShowContact(false)} />

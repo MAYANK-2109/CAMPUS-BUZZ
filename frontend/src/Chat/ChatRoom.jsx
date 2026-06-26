@@ -8,12 +8,14 @@
  *   2. On `joinedRoom` event → set history from server.
  *   3. On `newMessage`  → append message to state.
  *   4. On `roomError`   → surface error to user.
- *   5. On unmount → leave the room gracefully (socket cleanup handled by context).
+ *   5. On `roomClosed`  → show closed banner, disable input.
+ *   6. On unmount → leave the room gracefully (socket cleanup handled by context).
  *
  * Props:
  *   postId    {string}   MongoDB _id of the parent post.
  *   postTitle {string}   Title shown in the header.
  *   hashtag   {string}   #foodsplit | #cabsplit | #resell
+ *   isAuthor  {boolean}  Whether the current user is the post author.
  *   onClose   {Function} Callback to close the overlay.
  */
 
@@ -39,15 +41,17 @@ const HASHTAG_HEADER_BG = {
   '#resell':    'from-purple-950/80 to-gray-900',
 };
 
-const ChatRoom = ({ postId, postTitle, hashtag, onClose }) => {
+const ChatRoom = ({ postId, postTitle, hashtag, isAuthor = false, onClose, onRoomClosed }) => {
   const { socket, connected } = useSocket();
   const { user }              = useAuth();
 
-  const [messages, setMessages] = useState([]);
-  const [text,     setText]     = useState('');
-  const [joined,   setJoined]   = useState(false);
-  const [error,    setError]    = useState('');
-  const [sending,  setSending]  = useState(false);
+  const [messages,   setMessages]   = useState([]);
+  const [text,       setText]       = useState('');
+  const [joined,     setJoined]     = useState(false);
+  const [error,      setError]      = useState('');
+  const [sending,    setSending]    = useState(false);
+  const [roomClosed, setRoomClosed] = useState(false);
+  const [closing,    setClosing]    = useState(false);
 
   const bottomRef   = useRef(null);
   const inputRef    = useRef(null);
@@ -93,10 +97,22 @@ const ChatRoom = ({ postId, postTitle, hashtag, onClose }) => {
       ]);
     };
 
+    // ── roomClosed: poster has closed the room ────────────────────────────────
+    const handleRoomClosed = ({ message: msg }) => {
+      setRoomClosed(true);
+      setMessages((prev) => [
+        ...prev,
+        { _id: Date.now(), isSystem: true, isClosed: true, text: msg || 'This room has been closed by the poster.' },
+      ]);
+      // Notify parent (PostCard) to update the CTA button
+      onRoomClosed?.();
+    };
+
     socket.on('joinedRoom',  handleJoined);
     socket.on('newMessage',  handleNewMessage);
     socket.on('roomError',   handleRoomError);
     socket.on('userJoined',  handleUserJoined);
+    socket.on('roomClosed',  handleRoomClosed);
 
     // Emit joinRoom only once
     hasJoined.current = true;
@@ -107,6 +123,7 @@ const ChatRoom = ({ postId, postTitle, hashtag, onClose }) => {
       socket.off('newMessage',  handleNewMessage);
       socket.off('roomError',   handleRoomError);
       socket.off('userJoined',  handleUserJoined);
+      socket.off('roomClosed',  handleRoomClosed);
     };
   }, [socket, postId]);
 
@@ -117,18 +134,28 @@ const ChatRoom = ({ postId, postTitle, hashtag, onClose }) => {
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
+  // ── Close room (poster only) ────────────────────────────────────────────────
+  const handleCloseRoom = useCallback(() => {
+    if (!socket || closing || roomClosed) return;
+    if (!window.confirm('Close this room? Participants will no longer be able to send messages.')) return;
+    setClosing(true);
+    socket.emit('closeRoom', { postId });
+    // roomClosed event will flip state for everyone including us
+    setClosing(false);
+  }, [socket, postId, closing, roomClosed]);
+
   // ── Send message ────────────────────────────────────────────────────────────
   const handleSend = useCallback((e) => {
     e.preventDefault();
     const trimmed = text.trim();
-    if (!trimmed || !socket || sending) return;
+    if (!trimmed || !socket || sending || roomClosed) return;
 
     setSending(true);
     socket.emit('sendMessage', { postId, text: trimmed });
     setText('');
     setSending(false);
     inputRef.current?.focus();
-  }, [text, socket, postId, sending]);
+  }, [text, socket, postId, sending, roomClosed]);
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   const accent     = HASHTAG_ACCENT[hashtag]    || 'text-violet-400 border-violet-500/40';
@@ -173,6 +200,30 @@ const ChatRoom = ({ postId, postTitle, hashtag, onClose }) => {
                 title={connected ? 'Connected' : 'Reconnecting…'}
                 className={`w-2 h-2 rounded-full ${connected ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`}
               />
+
+              {/* Close Room — visible to poster only */}
+              {isAuthor && !roomClosed && (
+                <button
+                  onClick={handleCloseRoom}
+                  disabled={closing || !joined}
+                  title="Close this room"
+                  className="text-xs font-semibold px-2.5 py-1 rounded-lg
+                             bg-red-600/20 border border-red-500/40 text-red-400
+                             hover:bg-red-600/40 hover:text-red-300
+                             disabled:opacity-40 disabled:cursor-not-allowed
+                             transition-colors flex-shrink-0"
+                >
+                  {closing ? 'Closing…' : '🔒 Close Room'}
+                </button>
+              )}
+
+              {/* Closed badge in header */}
+              {roomClosed && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-700 text-gray-400 border border-gray-600">
+                  Closed
+                </span>
+              )}
+
               <button
                 onClick={onClose}
                 className="text-gray-400 hover:text-white transition-colors"
@@ -211,7 +262,11 @@ const ChatRoom = ({ postId, postTitle, hashtag, onClose }) => {
             msg.isSystem ? (
               /* System / join messages */
               <p key={msg._id}
-                 className="text-center text-xs text-gray-600 italic py-1">
+                 className={`text-center text-xs italic py-1 ${
+                   msg.isClosed
+                     ? 'text-red-400 font-semibold'
+                     : 'text-gray-600'
+                 }`}>
                 {msg.text}
               </p>
             ) : (
@@ -219,7 +274,7 @@ const ChatRoom = ({ postId, postTitle, hashtag, onClose }) => {
             )
           )}
 
-          {messages.length === 0 && joined && (
+          {messages.length === 0 && joined && !roomClosed && (
             <p className="text-center text-gray-600 text-sm py-8">
               No messages yet. Say hello! 👋
             </p>
@@ -229,34 +284,44 @@ const ChatRoom = ({ postId, postTitle, hashtag, onClose }) => {
         </div>
 
         {/* ── Input area ───────────────────────────────────────────────────── */}
-        <form
-          onSubmit={handleSend}
-          className="flex-shrink-0 border-t border-gray-700/60
-                     bg-gray-900/80 backdrop-blur-sm px-4 py-3 flex gap-2"
-        >
-          <input
-            ref={inputRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={joined ? 'Type a message…' : 'Joining room…'}
-            disabled={!joined || !connected}
-            maxLength={1000}
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-xl
-                       px-3 py-2 text-sm text-white placeholder-gray-500
-                       focus:outline-none focus:border-violet-500/60
-                       disabled:opacity-50 transition-colors"
-          />
-          <button
-            type="submit"
-            disabled={!text.trim() || !joined || !connected || sending}
-            className="px-4 py-2 bg-violet-600 hover:bg-violet-500
-                       disabled:opacity-40 disabled:cursor-not-allowed
-                       text-white rounded-xl text-sm font-semibold
-                       transition-colors flex-shrink-0"
+        {roomClosed ? (
+          /* Closed state banner replaces the input bar */
+          <div className="flex-shrink-0 border-t border-gray-700/60
+                          bg-gray-900/80 backdrop-blur-sm px-4 py-4
+                          flex items-center justify-center gap-2">
+            <span className="text-sm text-gray-500">🔒</span>
+            <p className="text-sm text-gray-500 italic">This room is closed. No new messages can be sent.</p>
+          </div>
+        ) : (
+          <form
+            onSubmit={handleSend}
+            className="flex-shrink-0 border-t border-gray-700/60
+                       bg-gray-900/80 backdrop-blur-sm px-4 py-3 flex gap-2"
           >
-            Send
-          </button>
-        </form>
+            <input
+              ref={inputRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={joined ? 'Type a message…' : 'Joining room…'}
+              disabled={!joined || !connected}
+              maxLength={1000}
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-xl
+                         px-3 py-2 text-sm text-white placeholder-gray-500
+                         focus:outline-none focus:border-violet-500/60
+                         disabled:opacity-50 transition-colors"
+            />
+            <button
+              type="submit"
+              disabled={!text.trim() || !joined || !connected || sending}
+              className="px-4 py-2 bg-violet-600 hover:bg-violet-500
+                         disabled:opacity-40 disabled:cursor-not-allowed
+                         text-white rounded-xl text-sm font-semibold
+                         transition-colors flex-shrink-0"
+            >
+              Send
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
