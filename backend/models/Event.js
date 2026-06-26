@@ -40,6 +40,27 @@ const EventSchema = new mongoose.Schema(
       maxlength: [3000, 'Description cannot exceed 3000 characters'],
     },
 
+    eventType: {
+      type:    String,
+      enum:    ['Online', 'Offline'],
+      default: 'Offline',
+    },
+
+    meetingLink: {
+      type: String,
+      trim: true,
+    },
+
+    passcode: {
+      type: String,
+      trim: true,
+    },
+
+    mapLink: {
+      type: String,
+      trim: true,
+    },
+
     /**
      * createdBy: Club or Admin accounts publish events.
      * Students submit event *requests* (status: 'Pending') which are

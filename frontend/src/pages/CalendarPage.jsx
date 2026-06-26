@@ -36,6 +36,7 @@ const CalendarPage = () => {
   const [formError,    setFormError]    = useState('');
   const [form, setForm] = useState({
     title: '', date: '', time: '', venue: '', description: '',
+    eventType: 'Offline', meetingLink: '', passcode: '', mapLink: ''
   });
 
   const days = getCalendarDays(currentMonth);
@@ -67,7 +68,7 @@ const CalendarPage = () => {
       const { data } = await api.post('/events', form);
       setEvents((prev) => [...prev, data.data]);
       setShowForm(false);
-      setForm({ title: '', date: '', time: '', venue: '', description: '' });
+      setForm({ title: '', date: '', time: '', venue: '', description: '', eventType: 'Offline', meetingLink: '', passcode: '', mapLink: '' });
     } catch (err) {
       setFormError(err.response?.data?.message || 'Failed to submit event.');
     } finally {
@@ -166,8 +167,27 @@ const CalendarPage = () => {
                 {eventsForDay(selectedDay).map(ev => (
                   <div key={ev._id} className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 bg-gray-50 border border-gray-100 rounded-lg p-4">
                     <div>
-                      <p className="font-semibold text-gray-900 text-base">{ev.title}</p>
+                      <p className="font-semibold text-gray-900 text-base">
+                        {ev.title}
+                        <span className={`ml-2 text-[10px] px-2 py-0.5 rounded-full font-medium ${ev.eventType === 'Online' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                          {ev.eventType || 'Offline'}
+                        </span>
+                      </p>
                       <p className="text-sm text-gray-600 mt-1"><span className="font-medium">{ev.time}</span> • {ev.venue}</p>
+                      
+                      {ev.eventType === 'Online' && ev.meetingLink && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <a href={ev.meetingLink} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline font-medium">Join Meeting</a>
+                          {ev.passcode && <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">Passcode: {ev.passcode}</span>}
+                        </div>
+                      )}
+                      
+                      {(ev.eventType === 'Offline' || !ev.eventType) && ev.mapLink && (
+                        <div className="mt-2">
+                          <a href={ev.mapLink} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline font-medium">View on Map</a>
+                        </div>
+                      )}
+
                       {ev.description && <p className="text-sm text-gray-700 mt-2">{ev.description}</p>}
                       <p className="text-xs text-gray-400 mt-3">Organized by {ev.createdBy?.displayName}</p>
                     </div>
@@ -210,6 +230,30 @@ const CalendarPage = () => {
 
               <input className="input-base" name="title" value={form.title} onChange={e => setForm(p => ({...p, title: e.target.value}))} placeholder="Event Title" required />
               <input className="input-base" name="venue" value={form.venue} onChange={e => setForm(p => ({...p, venue: e.target.value}))} placeholder="Venue" required />
+              
+              {isCreator && (
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                    <input type="radio" name="eventType" value="Offline" checked={form.eventType === 'Offline'} onChange={e => setForm(p => ({...p, eventType: e.target.value, meetingLink: '', passcode: ''}))} className="accent-blue-600" />
+                    Offline
+                  </label>
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                    <input type="radio" name="eventType" value="Online" checked={form.eventType === 'Online'} onChange={e => setForm(p => ({...p, eventType: e.target.value, mapLink: ''}))} className="accent-blue-600" />
+                    Online
+                  </label>
+                </div>
+              )}
+
+              {isCreator && form.eventType === 'Online' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input className="input-base" name="meetingLink" value={form.meetingLink} onChange={e => setForm(p => ({...p, meetingLink: e.target.value}))} placeholder="Meeting Link (e.g. Zoom/Meet)" />
+                  <input className="input-base" name="passcode" value={form.passcode} onChange={e => setForm(p => ({...p, passcode: e.target.value}))} placeholder="Passcode (Optional)" />
+                </div>
+              )}
+
+              {isCreator && form.eventType === 'Offline' && (
+                <input className="input-base" name="mapLink" value={form.mapLink} onChange={e => setForm(p => ({...p, mapLink: e.target.value}))} placeholder="Google Maps Link (Optional)" />
+              )}
               
               <div className="grid grid-cols-2 gap-3">
                 <input className="input-base" type="date" name="date" value={form.date} onChange={e => setForm(p => ({...p, date: e.target.value}))} required />

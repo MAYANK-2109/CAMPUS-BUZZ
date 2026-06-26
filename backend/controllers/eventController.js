@@ -40,7 +40,7 @@ exports.getEvents = async (req, res) => {
 // ── POST /api/events ──────────────────────────────────────────────────────────
 exports.createEvent = async (req, res) => {
   try {
-    const { title, date, time, venue, description } = req.body;
+    const { title, date, time, venue, description, eventType, meetingLink, passcode, mapLink } = req.body;
 
     if (!title || !date || !time || !venue) {
       return res.status(400).json({
@@ -58,6 +58,10 @@ exports.createEvent = async (req, res) => {
       time,
       venue,
       description: description || '',
+      eventType:   eventType || 'Offline',
+      meetingLink: meetingLink || '',
+      passcode:    passcode || '',
+      mapLink:     mapLink || '',
       createdBy:   req.user._id,
       status,
     });
