@@ -1,0 +1,310 @@
+/* src/index.css
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Campus Buzz global styles — Instagram-inspired light theme.
+ * Desktop: 3-column layout (Left sidebar | Feed | Right panel)
+ * Mobile: Full-width feed + bottom tab bar
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base resets ─────────────────────────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: #F4F4F5; /* barely-off-white, imperceptible vs pure white */
+    color: #111827;
+    margin: 0;
+  }
+
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+  input[type="datetime-local"],
+  input[type="date"],
+  input[type="time"] { color-scheme: light; }
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
+@layer utilities {
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+
+  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: #e5e7eb transparent; }
+  .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { @apply bg-gray-200 rounded-full; }
+}
+
+/* ── Design System Components ─────────────────────────────────────────────── */
+@layer components {
+
+  /* ───────────────────────── 3-COLUMN APP SHELL ───────────────────────────── */
+
+  /* Root wrapper: sidebar + content */
+  .cb-app-shell {
+    @apply flex min-h-screen;
+  }
+
+  /* Main area next to sidebar */
+  .cb-main {
+    @apply flex flex-1 min-w-0;
+    /* On mobile the sidebar is hidden, main fills the screen */
+  }
+  @media (min-width: 768px) {
+    .cb-main {
+      /* Left sidebar is 240px; main takes the rest */
+      margin-left: 240px;
+    }
+  }
+  @media (min-width: 1280px) {
+    .cb-main {
+      margin-left: 260px;
+    }
+  }
+
+  /* Feed column: always expands, centred, max-width constrained */
+  .cb-feed-col {
+    @apply flex-1 min-w-0;
+  }
+
+  /* Right panel layout when present */
+  .cb-main--with-rp .cb-feed-col {
+    /* Feed shifts left when right panel is visible */
+  }
+
+  /* ─────────────────────────── LEFT SIDEBAR ───────────────────────────────── */
+
+  .cb-sidebar {
+    @apply fixed top-0 left-0 bottom-0 z-40 flex-col;
+    width: 240px;
+    background: #ffffff;
+    border-right: 1px solid #e5e7eb;
+    padding: 20px 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  @media (min-width: 1280px) {
+    .cb-sidebar { width: 260px; padding: 20px 16px 16px; }
+  }
+
+  /* Brand / logo area */
+  .cb-brand {
+    @apply flex items-center gap-3 px-3 py-2 rounded-xl mb-4 transition-opacity;
+    text-decoration: none;
+  }
+  .cb-brand:hover { opacity: 0.8; }
+
+  .cb-brand-name {
+    @apply font-black text-gray-900 text-lg tracking-tight;
+    /* Visible on wider sidebar */
+    display: block;
+  }
+
+  /* Nav section */
+  .cb-nav {
+    @apply flex flex-col gap-1;
+  }
+
+  .cb-nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all;
+    color: #6b7280;
+    text-decoration: none;
+  }
+  .cb-nav-item:hover {
+    @apply bg-gray-100 text-gray-900;
+  }
+  .cb-nav-active {
+    @apply bg-gray-100 text-gray-900 font-semibold;
+  }
+
+  .cb-nav-icon {
+    @apply w-5 h-5 flex-shrink-0;
+  }
+  .cb-nav-label {
+    @apply truncate;
+  }
+
+  /* Hack: notification label in nav — handled inline, this is a no-op */
+  .cb-nav-label-standalone { display: none; }
+
+  /* ─────────────────────────── USER BLOCK ─────────────────────────────────── */
+
+  .cb-user-block {
+    @apply relative;
+  }
+
+  .cb-user-btn {
+    @apply flex items-center gap-3 w-full px-2 py-2 rounded-xl hover:bg-gray-100 transition-colors;
+    border: none; background: transparent; cursor: pointer;
+  }
+
+  .cb-avatar-ring {
+    @apply w-9 h-9 rounded-full flex-shrink-0 p-[2px];
+    background: linear-gradient(135deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+  }
+  .cb-avatar-inner {
+    @apply w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden;
+  }
+
+  .cb-user-menu {
+    @apply absolute bottom-full left-0 mb-2 w-56 bg-white border border-gray-200 rounded-2xl shadow-xl py-2 z-50 overflow-hidden;
+  }
+
+  /* ─────────────────────────── RIGHT PANEL ────────────────────────────────── */
+
+  .cb-right-panel {
+    width: 300px;
+    flex-shrink: 0;
+    padding: 24px 16px 24px 8px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  @media (min-width: 1440px) {
+    .cb-right-panel { width: 320px; }
+  }
+
+  .cb-rp-section {
+    @apply bg-white border border-gray-100 rounded-2xl p-4 shadow-sm;
+  }
+
+  .cb-rp-date-header {
+    @apply flex items-start justify-between mb-3;
+  }
+
+  .cb-today-dot {
+    @apply w-2.5 h-2.5 rounded-full bg-blue-500 mt-1;
+    box-shadow: 0 0 0 4px rgba(59,130,246,0.15);
+  }
+
+  .cb-event-pill {
+    @apply flex items-stretch gap-3 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 transition-colors hover:bg-blue-50 hover:border-blue-100;
+  }
+  .cb-event-stripe {
+    @apply w-1 rounded-full bg-blue-400 flex-shrink-0;
+  }
+
+  /* ─────────────────────────── CLUB SEARCH ────────────────────────────────── */
+
+  .cb-search-wrap {
+    @apply flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 focus-within:bg-white focus-within:border-gray-300 transition-all;
+  }
+  .cb-search-input {
+    @apply flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none min-w-0;
+  }
+
+  .cb-club-card {
+    @apply flex items-center gap-3 px-1 py-2.5 rounded-xl hover:bg-gray-50 transition-colors;
+  }
+  .cb-club-avatar {
+    @apply w-9 h-9 rounded-full bg-gradient-to-br from-violet-400 to-pink-400 flex items-center justify-center flex-shrink-0 overflow-hidden;
+  }
+
+  .cb-follow-btn {
+    @apply flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full transition-all flex-shrink-0;
+  }
+  .cb-follow-btn--not {
+    @apply bg-blue-500 hover:bg-blue-600 text-white;
+  }
+  .cb-follow-btn--following {
+    @apply bg-gray-100 hover:bg-red-50 hover:text-red-600 text-gray-700 border border-gray-200;
+  }
+
+  .cb-history-item {
+    @apply flex items-center gap-2 w-full px-1 py-2 rounded-xl hover:bg-gray-50 transition-colors text-left;
+  }
+
+  /* ─────────────────────────── BUTTONS ────────────────────────────────────── */
+
+  .btn-primary {
+    @apply px-5 py-2.5 bg-blue-500 hover:bg-blue-600 active:bg-blue-700
+           text-white text-sm font-semibold rounded-xl transition-all duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md
+           active:scale-[0.98];
+  }
+
+  .btn-ghost {
+    @apply px-5 py-2.5 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50
+           text-gray-700 text-sm font-semibold rounded-xl transition-all duration-150
+           active:scale-[0.98];
+  }
+
+  /* Card shell */
+  .card {
+    @apply bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-200;
+  }
+
+  /* Input field */
+  .input-base {
+    @apply w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5
+           text-sm text-gray-900 placeholder-gray-400
+           focus:outline-none focus:border-gray-400 focus:bg-white
+           transition-all duration-150;
+  }
+
+  /* IG-style Story ring gradient */
+  .avatar-ring {
+    background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  }
+
+  /* Skeleton shimmer */
+  .skeleton { @apply bg-gray-200 rounded animate-pulse; }
+}
+
+/* ── Micro-animations ────────────────────────────────────────────────────────── */
+@keyframes like-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.35); }
+  70%  { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-6px); }
+}
+
+.animate-like-pop   { animation: like-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+.animate-fade-in-up { animation: fade-in-up 0.3s ease-out forwards; }
+.animate-slide-in   { animation: slide-in 0.25s ease-out forwards; }
+.animate-float      { animation: float 3s ease-in-out infinite; }
+
+/* ── Staggered list entry ─────────────────────────────────────────────────── */
+.post-card-enter {
+  animation: fade-in-up 0.4s ease-out forwards;
+}
+
+/* ── Mobile bottom safe area ──────────────────────────────────────────────── */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+}
+.pb-safe { padding-bottom: 0; }
+
+/* ── Mobile body padding for bottom tab bar ─────────────────────────────── */
+@media (max-width: 767px) {
+  .cb-feed-col { padding-bottom: 72px; }
+}
