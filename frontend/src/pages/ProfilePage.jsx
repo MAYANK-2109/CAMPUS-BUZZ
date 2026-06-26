@@ -50,7 +50,7 @@ const ProfilePage = () => {
     try {
       const { data } = await api.patch('/users/profile', form);
       // Update local auth context (assuming login takes (user, token), but token hasn't changed)
-      const currentToken = localStorage.getItem('token');
+      const currentToken = localStorage.getItem('cb_token');
       login(data.data, currentToken);
       setEditing(false);
     } catch (err) {

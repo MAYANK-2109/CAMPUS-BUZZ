@@ -45,3 +45,21 @@ exports.updateProfile = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to update profile.' });
   }
 };
+
+// ── GET /api/users/:id ───────────────────────────────────────────────────────
+exports.getUserProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .select('displayName avatarUrl role bio followers following createdAt rollNo instituteEmail');
+      
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+    
+    // We can also fetch the post count or we can let the frontend fetch posts
+    return res.status(200).json({ success: true, data: user });
+  } catch (err) {
+    console.error('[userController.getUserProfile]', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch user profile.' });
+  }
+};

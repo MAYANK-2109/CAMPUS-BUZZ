@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { format, isSameDay, parseISO, isToday } from 'date-fns';
 import { Search, X, Clock, MapPin, Users, Check } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -51,14 +52,16 @@ const ClubCard = ({ club, currentUserId, onFollowToggle }) => {
 
   return (
     <div className="cb-club-card">
-      <div className="cb-club-avatar">
+      <Link to={`/profile/${club._id}`} className="cb-club-avatar block flex-shrink-0">
         {club.avatarUrl
           ? <img src={club.avatarUrl} alt={club.displayName} className="w-full h-full object-cover" />
           : <span className="text-sm font-bold text-gray-700">{club.displayName?.charAt(0)?.toUpperCase()}</span>
         }
-      </div>
+      </Link>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-gray-900 truncate">{club.displayName}</p>
+        <Link to={`/profile/${club._id}`} className="text-sm font-semibold text-gray-900 truncate block hover:underline">
+          {club.displayName}
+        </Link>
         <p className="text-xs text-gray-400 flex items-center gap-1">
           <Users className="w-3 h-3" />
           {count} follower{count !== 1 ? 's' : ''}

@@ -24,6 +24,7 @@ import CalendarPage   from './pages/CalendarPage';
 import ComplaintsPage from './pages/ComplaintsPage';
 import ForbiddenPage  from './pages/ForbiddenPage';
 import ProfilePage        from './pages/ProfilePage';
+import UserProfilePage    from './pages/UserProfilePage';
 import NotificationsPage  from './pages/NotificationsPage';
 
 /**
@@ -106,6 +107,16 @@ const App = () => (
               <ProtectedRoute>
                 <AuthLayout>
                   <ProfilePage />
+                </AuthLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile/:id"
+            element={
+              <ProtectedRoute>
+                <AuthLayout>
+                  <UserProfilePage />
                 </AuthLayout>
               </ProtectedRoute>
             }

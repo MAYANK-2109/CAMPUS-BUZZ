@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { formatDistanceToNow } from 'date-fns';
+import { Link } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
@@ -131,13 +132,17 @@ const CommentSection = ({ postId }) => {
         <div className="space-y-3 max-h-64 overflow-y-auto scrollbar-thin pr-1">
           {comments.map(c => (
             <div key={c._id} className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-xs font-bold text-gray-600 overflow-hidden">
-                {c.author?.avatarUrl
-                  ? <img src={c.author.avatarUrl} alt="" className="w-full h-full object-cover" />
-                  : c.author?.displayName?.charAt(0)?.toUpperCase()}
-              </div>
+              <Link to={`/profile/${c.author?._id}`} className="block flex-shrink-0">
+                <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600 overflow-hidden">
+                  {c.author?.avatarUrl
+                    ? <img src={c.author.avatarUrl} alt="" className="w-full h-full object-cover" />
+                    : c.author?.displayName?.charAt(0)?.toUpperCase()}
+                </div>
+              </Link>
               <div className="min-w-0">
-                <span className="text-sm font-semibold text-gray-900 mr-2">{c.author?.displayName}</span>
+                <Link to={`/profile/${c.author?._id}`} className="text-sm font-semibold text-gray-900 mr-2 hover:underline">
+                  {c.author?.displayName}
+                </Link>
                 <span className="text-sm text-gray-800 break-words">{c.text}</span>
                 <p className="text-[10px] text-gray-400 mt-0.5">
                   {formatDistanceToNow(new Date(c.createdAt), { addSuffix: true })}

@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
+import { Link } from 'react-router-dom';
 import { Heart, ThumbsDown, MessageCircle, Trash2, Send, MoreHorizontal } from 'lucide-react';
 import HashtagBadge   from './HashtagBadge';
 import CountdownTimer from './CountdownTimer';
@@ -19,7 +20,7 @@ const CHAT_HASHTAGS    = new Set(['#foodsplit', '#cabsplit', '#resell']);
 const CONTACT_HASHTAGS = new Set(['#lost', '#found']);
 const TIMED_HASHTAGS   = new Set(['#foodsplit', '#cabsplit']);
 
-const PostCard = ({ post: initialPost, onPostDeleted }) => {
+const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
   const { user }   = useAuth();
   const [post, setPost] = useState(initialPost);
 
@@ -108,23 +109,25 @@ const PostCard = ({ post: initialPost, onPostDeleted }) => {
         <div className="flex items-center justify-between px-4 pt-4 pb-3">
           <div className="flex items-center gap-3">
             {/* Avatar */}
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-rose-400 via-pink-500 to-orange-400 p-[2px] flex-shrink-0">
-              <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
-                {post.author?.avatarUrl ? (
-                  <img src={post.author.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-sm font-bold text-gray-700">
-                    {post.author?.displayName?.charAt(0)?.toUpperCase() || '?'}
-                  </span>
-                )}
+            <Link to={`/profile/${post.author?._id}`} className="block flex-shrink-0">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-rose-400 via-pink-500 to-orange-400 p-[2px]">
+                <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
+                  {post.author?.avatarUrl ? (
+                    <img src={post.author.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-sm font-bold text-gray-700">
+                      {post.author?.displayName?.charAt(0)?.toUpperCase() || '?'}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
+            </Link>
 
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-gray-900 leading-none">
+                <Link to={`/profile/${post.author?._id}`} className="text-sm font-semibold text-gray-900 leading-none hover:underline">
                   {post.author?.displayName}
-                </span>
+                </Link>
                 {post.author?.role !== 'Student' && (
                   <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${
                     post.author?.role === 'Club'
@@ -149,7 +152,7 @@ const PostCard = ({ post: initialPost, onPostDeleted }) => {
 
           {/* Options */}
           <div className="flex items-center gap-1">
-            {(isAuthor || isAdmin) && (
+            {!hideDelete && (isAuthor || isAdmin) && (
               <button
                 onClick={handleDelete}
                 disabled={deleting}
@@ -241,7 +244,9 @@ const PostCard = ({ post: initialPost, onPostDeleted }) => {
         {/* ── Content ───────────────────────────────────────────────────────── */}
         <div className="px-4 pt-1 pb-3">
           <p className="text-sm text-gray-900 leading-relaxed">
-            <span className="font-semibold mr-1.5">{post.author?.displayName}</span>
+            <Link to={`/profile/${post.author?._id}`} className="font-semibold mr-1.5 hover:underline">
+              {post.author?.displayName}
+            </Link>
             {post.title}
           </p>
           {post.description && (
