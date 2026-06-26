@@ -23,6 +23,7 @@ import ClubFeedPage   from './pages/ClubFeedPage';
 import CalendarPage   from './pages/CalendarPage';
 import ComplaintsPage from './pages/ComplaintsPage';
 import ForbiddenPage  from './pages/ForbiddenPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import ProfilePage        from './pages/ProfilePage';
 import UserProfilePage    from './pages/UserProfilePage';
 import NotificationsPage  from './pages/NotificationsPage';
@@ -53,6 +54,7 @@ const App = () => (
         <Routes>
           {/* ── Public ──────────────────────────────────────────────────────── */}
           <Route path="/login"     element={<LoginPage />} />
+          <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
           <Route path="/forbidden" element={<ForbiddenPage />} />
 
           {/* ── Feed (with right panel) ──────────────────────────────────── */}

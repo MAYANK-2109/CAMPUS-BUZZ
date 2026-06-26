@@ -11,6 +11,7 @@
 
 const mongoose = require('mongoose');
 const bcrypt   = require('bcryptjs');
+const crypto   = require('crypto');
 
 // ── Validation regex for the institute email format ──────────────────────────
 const INSTITUTE_EMAIL_REGEX =
@@ -96,6 +97,9 @@ const UserSchema = new mongoose.Schema(
     savedPosts: [
       { type: mongoose.Schema.Types.ObjectId, ref: 'Post' }
     ],
+
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
   },
   {
     timestamps: true,   // createdAt, updatedAt
@@ -119,6 +123,23 @@ UserSchema.pre('save', async function hashPassword(next) {
 // ── Instance method: compare a plaintext password against the stored hash ───
 UserSchema.methods.comparePassword = async function comparePassword(plain) {
   return bcrypt.compare(plain, this.passwordHash);
+};
+
+// ── Instance method: generate and hash password token ───────────────────────
+UserSchema.methods.getResetPasswordToken = function() {
+  // Generate token
+  const resetToken = crypto.randomBytes(20).toString('hex');
+
+  // Hash token and set to resetPasswordToken field
+  this.resetPasswordToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+
+  // Set expire (10 minutes)
+  this.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
+
+  return resetToken;
 };
 
 // ── Static helper: find by email (selects passwordHash explicitly) ───────────

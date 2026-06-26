@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/pages/ProfilePage.jsx
  * ─────────────────────────────────────────────────────────────────────────────
  * Own-user profile page: edit bio, view own posts, and access private saved posts.
@@ -21,6 +21,16 @@ const ProfilePage = () => {
     avatarUrl: user?.avatarUrl || '',
   });
   const [saving, setSaving] = useState(false);
+  
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
   
   const [posts,        setPosts]        = useState([]);
   const [savedPosts,   setSavedPosts]   = useState([]);
@@ -68,10 +78,36 @@ const ProfilePage = () => {
       const currentToken = localStorage.getItem('cb_token');
       login(data.data, currentToken);
       setEditing(false);
+      setShowPasswordForm(false);
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to update profile.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      return setPasswordError('New passwords do not match.');
+    }
+
+    setChangingPassword(true);
+    try {
+      await api.patch('/users/change-password', {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword
+      });
+      setPasswordSuccess('Password changed successfully.');
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => setShowPasswordForm(false), 2000);
+    } catch (err) {
+      setPasswordError(err.response?.data?.message || 'Failed to change password.');
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -125,9 +161,9 @@ const ProfilePage = () => {
         </div>
 
         {editing && (
-          <form onSubmit={handleSave} className="bg-white border border-gray-200 rounded-lg p-5 mb-10 shadow-sm">
+          <div className="bg-white border border-gray-200 rounded-lg p-5 mb-10 shadow-sm">
             <h2 className="font-semibold mb-4 text-lg">Edit Profile</h2>
-            <div className="space-y-4">
+            <form onSubmit={handleSave} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Display Name</label>
                 <input className="input-base" value={form.displayName} onChange={(e) => setForm(p => ({ ...p, displayName: e.target.value }))} required />
@@ -140,12 +176,40 @@ const ProfilePage = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Avatar URL (Optional)</label>
                 <input className="input-base" value={form.avatarUrl} onChange={(e) => setForm(p => ({ ...p, avatarUrl: e.target.value }))} placeholder="https://..." />
               </div>
+              <div className="flex gap-3 mt-5">
+                <button type="button" onClick={() => { setEditing(false); setShowPasswordForm(false); }} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 flex-1">Cancel</button>
+                <button type="submit" disabled={saving} className="btn-primary flex-1">{saving ? 'Saving...' : 'Save'}</button>
+              </div>
+            </form>
+
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              {!showPasswordForm ? (
+                <button type="button" onClick={() => setShowPasswordForm(true)} className="text-sm font-semibold text-gray-700 hover:text-gray-900 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  Change Password
+                </button>
+              ) : (
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  <h3 className="font-semibold text-md mb-2">Change Password</h3>
+                  {passwordError && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{passwordError}</p>}
+                  {passwordSuccess && <p className="text-sm text-green-600 bg-green-50 p-2 rounded">{passwordSuccess}</p>}
+                  <div>
+                    <input className="input-base" type="password" placeholder="Current Password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm(p => ({ ...p, currentPassword: e.target.value }))} required />
+                  </div>
+                  <div>
+                    <input className="input-base" type="password" placeholder="New Password" value={passwordForm.newPassword} onChange={(e) => setPasswordForm(p => ({ ...p, newPassword: e.target.value }))} required />
+                  </div>
+                  <div>
+                    <input className="input-base" type="password" placeholder="Confirm New Password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm(p => ({ ...p, confirmPassword: e.target.value }))} required />
+                  </div>
+                  <div className="flex gap-3 mt-3">
+                    <button type="button" onClick={() => setShowPasswordForm(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 flex-1">Cancel</button>
+                    <button type="submit" disabled={changingPassword} className="btn-primary flex-1">{changingPassword ? 'Updating...' : 'Update Password'}</button>
+                  </div>
+                </form>
+              )}
             </div>
-            <div className="flex gap-3 mt-5">
-              <button type="button" onClick={() => setEditing(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 flex-1">Cancel</button>
-              <button type="submit" disabled={saving} className="btn-primary flex-1">{saving ? 'Saving...' : 'Save'}</button>
-            </div>
-          </form>
+          </div>
         )}
 
         <div className="border-t border-gray-200">

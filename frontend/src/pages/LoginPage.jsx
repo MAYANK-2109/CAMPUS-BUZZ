@@ -14,25 +14,32 @@ const LoginPage = () => {
   const from       = location.state?.from?.pathname || '/feed';
 
   const [mode, setMode] = useState('login');
+  const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
   const [form, setForm] = useState({
     rollNo: '', instituteEmail: '', password: '', role: 'Student', displayName: '',
   });
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
+  const [message, setMessage] = useState('');
 
-  const handleChange = e => { setForm(p => ({ ...p, [e.target.name]: e.target.value })); setError(''); };
+  const handleChange = e => { setForm(p => ({ ...p, [e.target.name]: e.target.value })); setError(''); setMessage(''); };
 
   const handleSubmit = async e => {
     e.preventDefault();
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setMessage('');
     try {
-      const endpoint = mode === 'login' ? '/auth/login' : '/auth/register';
-      const payload  = mode === 'login'
-        ? { instituteEmail: form.instituteEmail, password: form.password }
-        : form;
-      const { data } = await api.post(endpoint, payload);
-      login(data.user, data.token);
-      navigate(from, { replace: true });
+      if (forgotPasswordMode) {
+        const { data } = await api.post('/auth/forgot-password', { instituteEmail: form.instituteEmail });
+        setMessage('Password reset email sent! Check your inbox (or console if mocked).');
+      } else {
+        const endpoint = mode === 'login' ? '/auth/login' : '/auth/register';
+        const payload  = mode === 'login'
+          ? { instituteEmail: form.instituteEmail, password: form.password }
+          : form;
+        const { data } = await api.post(endpoint, payload);
+        login(data.user, data.token);
+        navigate(from, { replace: true });
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Something went wrong.');
     } finally {
@@ -59,21 +66,30 @@ const LoginPage = () => {
           </div>
 
           {/* Tab toggle */}
-          <div className="flex rounded-xl overflow-hidden border border-gray-200 mb-6 bg-gray-50">
-            {['login', 'register'].map(m => (
-              <button
-                key={m}
-                onClick={() => { setMode(m); setError(''); }}
-                className={`flex-1 py-2 text-sm font-semibold transition-all ${
-                  mode === m
-                    ? 'bg-white text-gray-900 shadow-sm rounded-xl'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {m === 'login' ? 'Log in' : 'Sign up'}
-              </button>
-            ))}
-          </div>
+          {!forgotPasswordMode && (
+            <div className="flex rounded-xl overflow-hidden border border-gray-200 mb-6 bg-gray-50">
+              {['login', 'register'].map(m => (
+                <button
+                  key={m}
+                  onClick={() => { setMode(m); setError(''); setMessage(''); }}
+                  className={`flex-1 py-2 text-sm font-semibold transition-all ${
+                    mode === m
+                      ? 'bg-white text-gray-900 shadow-sm rounded-xl'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {m === 'login' ? 'Log in' : 'Sign up'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {forgotPasswordMode && (
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-900 text-center mb-2">Forgot Password</h2>
+              <p className="text-sm text-gray-500 text-center">Enter your email to receive a reset link.</p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-3">
             {error && (
@@ -81,8 +97,14 @@ const LoginPage = () => {
                 {error}
               </p>
             )}
+            
+            {message && (
+              <p className="text-sm text-green-600 bg-green-50 border border-green-100 rounded-xl px-3 py-2.5 text-center animate-fade-in-up">
+                {message}
+              </p>
+            )}
 
-            {mode === 'register' && (
+            {!forgotPasswordMode && mode === 'register' && (
               <>
                 {form.role === 'Student' && (
                   <input className="input-base" name="rollNo" value={form.rollNo} onChange={handleChange} placeholder="Roll Number (e.g. 22BCE001)" required />
@@ -97,13 +119,32 @@ const LoginPage = () => {
             )}
 
             <input className="input-base" name="instituteEmail" type="email" value={form.instituteEmail} onChange={handleChange} placeholder="Institute email" required />
-            <input className="input-base" name="password" type="password" value={form.password} onChange={handleChange} placeholder="Password" required />
+            
+            {!forgotPasswordMode && (
+              <>
+                <input className="input-base" name="password" type="password" value={form.password} onChange={handleChange} placeholder="Password" required />
+                
+                {mode === 'login' && (
+                  <div className="flex justify-end">
+                    <button type="button" onClick={() => { setForgotPasswordMode(true); setError(''); setMessage(''); }} className="text-xs text-blue-500 hover:text-blue-600 font-medium">
+                      Forgot Password?
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
 
             <button type="submit" disabled={loading} className="btn-primary w-full mt-2 justify-center text-center">
               {loading
-                ? (mode === 'login' ? 'Logging in…' : 'Creating account…')
-                : (mode === 'login' ? 'Log in' : 'Create Account')}
+                ? (forgotPasswordMode ? 'Sending...' : (mode === 'login' ? 'Logging in…' : 'Creating account…'))
+                : (forgotPasswordMode ? 'Send Reset Link' : (mode === 'login' ? 'Log in' : 'Create Account'))}
             </button>
+            
+            {forgotPasswordMode && (
+              <button type="button" onClick={() => { setForgotPasswordMode(false); setError(''); setMessage(''); }} className="w-full mt-2 text-sm text-gray-500 hover:text-gray-700 font-medium transition-colors">
+                Back to Login
+              </button>
+            )}
           </form>
         </div>
 

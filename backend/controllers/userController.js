@@ -63,3 +63,35 @@ exports.getUserProfile = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to fetch user profile.' });
   }
 };
+
+// ── PATCH /api/users/change-password ─────────────────────────────────────────
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Please provide both current and new password.' });
+    }
+
+    // Must fetch user with password to check
+    const user = await User.findById(req.user._id).select('+passwordHash');
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Incorrect current password.' });
+    }
+
+    // Update password
+    user.passwordHash = newPassword;
+    await user.save();
+
+    return res.status(200).json({ success: true, message: 'Password changed successfully.' });
+  } catch (err) {
+    console.error('[userController.changePassword]', err);
+    return res.status(500).json({ success: false, message: 'Failed to change password.' });
+  }
+};
