@@ -61,7 +61,7 @@ const StoryRing = ({ announcement, userId, onClick, isCreate = false, onCreateCl
     );
   }
 
-  const seen = (announcement.seenBy || []).map(id => id.toString()).includes(userId);
+  const seen = (announcement.seenBy || []).map(id => id?.toString()).includes(userId);
   const author = announcement.author;
 
   return (
@@ -99,7 +99,7 @@ const StoryViewer = ({ stories, startIndex = 0, onClose, userId, onDeleted }) =>
 
   const markSeen = useCallback(async (ann) => {
     if (!ann) return;
-    const alreadySeen = (ann.seenBy || []).map(id => id.toString()).includes(userId);
+    const alreadySeen = (ann.seenBy || []).map(id => id?.toString()).includes(userId);
     if (!alreadySeen) {
       try { await api.post(`/announcements/${ann._id}/seen`); } catch { /* silent */ }
     }

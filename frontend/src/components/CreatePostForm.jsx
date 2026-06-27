@@ -7,7 +7,7 @@ import { X, Image, Hash, Clock, AtSign } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../utils/api';
 
-const HASHTAGS = ['None', '#foodsplit', '#cabsplit', '#resell', '#lost', '#found'];
+const HASHTAGS = ['#foodsplit', '#cabsplit', '#resell', '#lost', '#found'];
 const TIMED    = new Set(['#foodsplit', '#cabsplit']);
 
 const HASHTAG_COLORS = {
@@ -16,11 +16,10 @@ const HASHTAG_COLORS = {
   '#resell':    'bg-green-100 text-green-800 border-green-200',
   '#lost':      'bg-red-100 text-red-800 border-red-200',
   '#found':     'bg-emerald-100 text-emerald-800 border-emerald-200',
-  'None':       'bg-gray-100 text-gray-700 border-gray-200',
 };
 
 const CreatePostForm = ({ onPostCreated, onClose }) => {
-  const [form, setForm] = useState({ title: '', description: '', imageUrl: '', hashtag: 'None', expiresAt: '', customTagsStr: '', totalFare: '' });
+  const [form, setForm] = useState({ title: '', description: '', imageUrl: '', hashtag: '', expiresAt: '', customTagsStr: '', totalFare: '' });
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
 
@@ -87,6 +86,8 @@ const CreatePostForm = ({ onPostCreated, onClose }) => {
     e.preventDefault();
     setError('');
     if (!form.title.trim() || !form.description.trim()) return setError('Title & description are required.');
+    if (!form.hashtag) return setError('You must select a primary hashtag.');
+    if (!form.imageUrl?.trim()) return setError('An image URL is required.');
     if (TIMED.has(form.hashtag) && !form.expiresAt) return setError(`Expiry time required for ${form.hashtag}.`);
 
     setLoading(true);

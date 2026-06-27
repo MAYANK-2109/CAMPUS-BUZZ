@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { format, isSameDay, parseISO, isToday } from 'date-fns';
-import { Search, X, Clock, MapPin, Users, Check } from 'lucide-react';
+import { Search, X, Clock, MapPin, Users, Check, Hash, TrendingUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
@@ -30,7 +30,7 @@ const clearHistory = () => localStorage.removeItem(HISTORY_KEY);
 /* ─── Club card ───────────────────────────────────────────────────────────── */
 const ClubCard = ({ club, currentUserId, onFollowToggle }) => {
   const [following, setFollowing] = useState(
-    (club.followers || []).map(id => id.toString()).includes(currentUserId)
+    (club.followers || []).map(id => id?.toString()).includes(currentUserId)
   );
   const [count, setCount] = useState((club.followers || []).length);
   const [loading, setLoading] = useState(false);
@@ -157,6 +157,57 @@ const TodayEvents = () => {
   );
 };
 
+/* ─── Trending Hashtags widget ──────────────────────────────────────────── */
+const HASHTAG_COLORS = {
+  '#foodsplit': 'bg-orange-100 text-orange-700 border-orange-200',
+  '#cabsplit':  'bg-blue-100 text-blue-700 border-blue-200',
+  '#resell':    'bg-green-100 text-green-700 border-green-200',
+  '#lost':      'bg-red-100 text-red-700 border-red-200',
+  '#found':     'bg-emerald-100 text-emerald-700 border-emerald-200',
+};
+
+const TrendingHashtags = () => {
+  const [trends,  setTrends]  = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/posts/trending-hashtags')
+      .then(({ data }) => setTrends(data.data || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (!loading && trends.length === 0) return null;
+
+  return (
+    <div className="cb-rp-section">
+      <div className="flex items-center gap-2 mb-3">
+        <TrendingUp className="w-3.5 h-3.5 text-gray-400" />
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Trending</p>
+      </div>
+      {loading ? (
+        <div className="space-y-2">
+          {[1,2,3].map(i => <div key={i} className="h-7 bg-gray-100 rounded-lg animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {trends.map((t, idx) => (
+            <div key={t.hashtag} className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-gray-400 w-4 text-right">{idx + 1}</span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${HASHTAG_COLORS[t.hashtag] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                  {t.hashtag}
+                </span>
+              </div>
+              <span className="text-[10px] text-gray-400 font-medium flex-shrink-0">{t.count} post{t.count !== 1 ? 's' : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ─── Main RightPanel ─────────────────────────────────────────────────────── */
 const RightPanel = () => {
   const { user } = useAuth();
@@ -198,10 +249,13 @@ const RightPanel = () => {
   return (
     <aside className="cb-right-panel hidden lg:flex flex-col gap-4">
 
-      {/* ── Upper: Today's Events ─────────────────────────────────────────── */}
+      {/* ── Upper: Today's Events ─────────────────────────────────── */}
       <TodayEvents />
 
-      {/* ── Lower: Club Search ────────────────────────────────────────────── */}
+      {/* ── Trending Hashtags ──────────────────────────────────────── */}
+      <TrendingHashtags />
+
+      {/* ── Lower: Club Search ───────────────────────────────────────── */}
       <div className="cb-rp-section flex-1">
         <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Clubs</p>
 

@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Heart, MessageCircle, ThumbsDown, UserPlus, Bell, AtSign, Megaphone } from 'lucide-react';
+import { Heart, MessageCircle, ThumbsDown, UserPlus, Bell, AtSign, Megaphone, CalendarPlus, Timer } from 'lucide-react';
 import api from '../utils/api';
 
 const TYPE_ICON = {
@@ -14,7 +14,9 @@ const TYPE_ICON = {
   new_post:     { Icon: Bell,           bg: 'bg-purple-100', text: 'text-purple-500' },
   follow:       { Icon: UserPlus,       bg: 'bg-green-100',  text: 'text-green-500' },
   mention:      { Icon: AtSign,         bg: 'bg-indigo-100', text: 'text-indigo-500' },
-  announcement: { Icon: Megaphone,      bg: 'bg-yellow-100', text: 'text-yellow-600' },
+  announcement:  { Icon: Megaphone,     bg: 'bg-yellow-100',  text: 'text-yellow-600' },
+  event_request:  { Icon: CalendarPlus,  bg: 'bg-violet-100',  text: 'text-violet-600' },
+  expiry_warning: { Icon: Timer,          bg: 'bg-amber-100',   text: 'text-amber-600'  },
 };
 
 const NotificationsPage = () => {
@@ -89,10 +91,18 @@ const NotificationsPage = () => {
 
                   {/* Message */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 leading-snug">
-                      <span className="font-semibold">{n.sender?.displayName || 'Someone'}</span>{' '}
-                      {n.message?.replace(n.sender?.displayName || 'Someone', '').trim() || n.type.replace('_', ' ')}
-                    </p>
+                      {/* For event_request, show the full message as the body */}
+                      {n.type === 'event_request' ? (
+                        <p className="text-sm text-gray-900 leading-snug">
+                          <span className="font-semibold">{n.sender?.displayName || 'Someone'}</span>{' sent an event request — '}
+                          {n.message?.split(':').slice(1).join(':').trim() || n.message}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-gray-900 leading-snug">
+                          <span className="font-semibold">{n.sender?.displayName || 'Someone'}</span>{' '}
+                          {n.message?.replace(n.sender?.displayName || 'Someone', '').trim() || n.type.replace('_', ' ')}
+                        </p>
+                      )}
                     {n.post?.title && (
                       <p className="text-xs text-gray-500 mt-0.5 truncate">"{n.post.title}"</p>
                     )}

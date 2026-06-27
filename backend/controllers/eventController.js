@@ -121,3 +121,41 @@ exports.deleteEvent = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to delete event.' });
   }
 };
+
+// ── POST /api/events/request (Students only) ─────────────────────────────────
+exports.requestEvent = async (req, res) => {
+  try {
+    const { title, description, date, adminIds } = req.body;
+    
+    if (!title || !description || !date || !adminIds || !adminIds.length) {
+      return res.status(400).json({ success: false, message: 'All fields and at least one Admin are required.' });
+    }
+
+    const User = require('../models/User');
+    const Notification = require('../models/Notification');
+
+    // Verify selected users are actually admins
+    const selectedAdmins = await User.find({ _id: { $in: adminIds }, role: 'Admin' });
+    
+    if (!selectedAdmins.length) {
+      return res.status(400).json({ success: false, message: 'No valid admins selected.' });
+    }
+
+    const eventDate = new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const message = `Event Request from ${req.user.displayName}: "${title}" on ${eventDate}. Description: ${description}`;
+
+    const notifs = selectedAdmins.map(admin => ({
+      recipient: admin._id,
+      sender:    req.user._id,
+      type:      'event_request',
+      message:   message,
+    }));
+
+    await Notification.insertMany(notifs);
+
+    return res.status(200).json({ success: true, message: 'Event request sent successfully.' });
+  } catch (err) {
+    console.error('[eventController.requestEvent]', err);
+    return res.status(500).json({ success: false, message: 'Failed to send event request.' });
+  }
+};

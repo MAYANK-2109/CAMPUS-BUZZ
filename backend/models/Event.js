@@ -83,6 +83,11 @@ const EventSchema = new mongoose.Schema(
       enum:    ['Approved', 'Pending', 'Rejected'],
       default: 'Pending',
     },
+
+    rsvps: {
+      type:    [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
+    },
   },
   {
     timestamps: true,

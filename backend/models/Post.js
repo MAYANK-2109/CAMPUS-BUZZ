@@ -16,7 +16,7 @@
 const mongoose = require('mongoose');
 
 // ── Valid hashtag values ─────────────────────────────────────────────────────
-const HASHTAGS = ['#foodsplit', '#cabsplit', '#resell', '#lost', '#found', 'None'];
+const HASHTAGS = ['#foodsplit', '#cabsplit', '#resell', '#lost', '#found'];
 
 const PostSchema = new mongoose.Schema(
   {
@@ -35,9 +35,9 @@ const PostSchema = new mongoose.Schema(
     },
 
     imageUrl: {
-      type:    String,
-      trim:    true,
-      default: null,
+      type:     String,
+      required: [true, 'Every post must include an image'],
+      trim:     true,
     },
 
     author: {
@@ -47,12 +47,12 @@ const PostSchema = new mongoose.Schema(
     },
 
     hashtag: {
-      type:    String,
-      enum:    {
+      type:     String,
+      required: [true, 'Hashtag is mandatory'],
+      enum:     {
         values:  HASHTAGS,
         message: `Hashtag must be one of: ${HASHTAGS.join(', ')}`,
       },
-      default: 'None',
     },
 
     customTags: {
@@ -97,6 +97,12 @@ const PostSchema = new mongoose.Schema(
     mentions: [
       { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
     ],
+
+    /** Set to true once the 30-min pre-expiry warning notification has been sent */
+    expiryWarned: {
+      type:    Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

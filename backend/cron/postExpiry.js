@@ -21,9 +21,46 @@ const cron         = require('node-cron');
 const Post         = require('../models/Post');
 const ChatRoom     = require('../models/ChatRoom');
 const Announcement = require('../models/Announcement');
+const Notification = require('../models/Notification');
 
 // ── Hashtags whose posts are subject to time-based expiry ────────────────────
 const EXPIRY_HASHTAGS = ['#foodsplit', '#cabsplit'];
+
+/**
+ * notifyPreExpiry
+ * ───────────────
+ * Fires a one-time in-app notification to the post author when the post is
+ * 30–35 minutes from expiry. The 5-minute cron window means we query a 35-min
+ * upper bound and guard against re-firing with `expiryWarned: false`.
+ */
+const notifyPreExpiry = async () => {
+  const now     = new Date();
+  const in35min = new Date(now.getTime() + 35 * 60 * 1000);
+
+  const soonPosts = await Post.find({
+    hashtag:      { $in: EXPIRY_HASHTAGS },
+    isActive:     true,
+    expiryWarned: false,
+    expiresAt:    { $gt: now, $lte: in35min },
+  }).select('_id title author hashtag expiresAt');
+
+  if (!soonPosts.length) return { warned: 0 };
+
+  const postIds = soonPosts.map(p => p._id);
+
+  // Build notifications for each author
+  const notifs = soonPosts.map(p => ({
+    recipient: p.author,
+    type:      'expiry_warning',
+    post:      p._id,
+    message:   `Your post "${p.title}" (${p.hashtag}) will expire in ~30 minutes and be removed automatically.`,
+  }));
+
+  await Notification.insertMany(notifs);
+  await Post.updateMany({ _id: { $in: postIds } }, { $set: { expiryWarned: true } });
+
+  return { warned: soonPosts.length };
+};
 
 /**
  * expireOldPosts
@@ -118,6 +155,11 @@ const startPostExpiryCron = () => {
     console.log(`[CRON] Maintenance job triggered at ${new Date().toISOString()}`);
 
     try {
+      const { warned } = await notifyPreExpiry();
+      if (warned > 0) {
+        console.log(`[CRON] preExpiry: sent ${warned} expiry warning notification(s).`);
+      }
+
       const { deactivatedPosts, deactivatedRooms } = await expireOldPosts();
       if (deactivatedPosts > 0) {
         console.log(`[CRON] postExpiry: deactivated ${deactivatedPosts} post(s), ${deactivatedRooms} chat room(s).`);
@@ -142,4 +184,4 @@ const startPostExpiryCron = () => {
   console.log('[CRON] Post expiry job scheduled (every 5 minutes).');
 };
 
-module.exports = { startPostExpiryCron, expireOldPosts, closeIdleGlobalRooms, expireAnnouncements };
+module.exports = { startPostExpiryCron, expireOldPosts, notifyPreExpiry, closeIdleGlobalRooms, expireAnnouncements };

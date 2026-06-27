@@ -21,6 +21,41 @@ const getCalendarDays = (month) => {
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+/* ─── RSVP Toggle Button ──────────────────────────────────────────────── */
+const RsvpButton = ({ eventId, initialRsvps, currentUserId }) => {
+  const [rsvps,   setRsvps]   = useState(initialRsvps);
+  const [loading, setLoading] = useState(false);
+  const joined = currentUserId && rsvps.map(id => id?.toString()).includes(currentUserId);
+
+  const toggle = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const { data } = await api.post(`/events/${eventId}/rsvp`);
+      // Optimistically update count
+      setRsvps(data.rsvped
+        ? [...rsvps, currentUserId]
+        : rsvps.filter(id => id?.toString() !== currentUserId)
+      );
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <button
+      onClick={toggle}
+      disabled={loading}
+      className={`text-xs font-semibold px-3 py-1 rounded-full border transition-colors ${
+        joined
+          ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600'
+          : 'bg-white border-gray-300 text-gray-700 hover:border-blue-400 hover:text-blue-600'
+      }`}
+    >
+      {joined ? `Going · ${rsvps.length}` : `Join · ${rsvps.length}`}
+    </button>
+  );
+};
+
 const CalendarPage = () => {
   const { user } = useAuth();
   const isCreator = user?.role === 'Club' || user?.role === 'Admin';
@@ -38,6 +73,15 @@ const CalendarPage = () => {
     title: '', date: '', time: '', venue: '', description: '',
     eventType: 'Offline', meetingLink: '', passcode: '', mapLink: ''
   });
+
+  // ── Request Event state (Students only) ──────────────────────────────────────
+  const [showRequest,   setShowRequest]   = useState(false);
+  const [reqForm,       setReqForm]       = useState({ title: '', description: '', date: '' });
+  const [reqLoading,    setReqLoading]    = useState(false);
+  const [reqError,      setReqError]      = useState('');
+  const [reqSuccess,    setReqSuccess]    = useState(false);
+  const [admins,        setAdmins]        = useState([]);
+  const [selectedAdmins, setSelectedAdmins] = useState([]);
 
   const days = getCalendarDays(currentMonth);
 
@@ -76,6 +120,47 @@ const CalendarPage = () => {
     }
   };
 
+  // Load admin list when Request modal opens
+  const openRequestModal = async () => {
+    setReqSuccess(false);
+    setReqError('');
+    setReqForm({ title: '', description: '', date: '' });
+    setSelectedAdmins([]);
+    setShowRequest(true);
+    try {
+      const { data } = await api.get('/users?role=Admin&limit=50');
+      setAdmins(data.data || []);
+    } catch {
+      setAdmins([]);
+    }
+  };
+
+  const toggleAdminSelect = (id) => {
+    setSelectedAdmins(prev =>
+      prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]
+    );
+  };
+
+  const handleRequestSubmit = async (e) => {
+    e.preventDefault();
+    setReqError('');
+    if (!selectedAdmins.length) return setReqError('Select at least one admin to notify.');
+    setReqLoading(true);
+    try {
+      await api.post('/events/request', {
+        title:       reqForm.title,
+        description: reqForm.description,
+        date:        reqForm.date,
+        adminIds:    selectedAdmins,
+      });
+      setReqSuccess(true);
+    } catch (err) {
+      setReqError(err.response?.data?.message || 'Failed to send request.');
+    } finally {
+      setReqLoading(false);
+    }
+  };
+
   const handleApprove = async (id) => {
     try {
       await api.patch(`/events/${id}/status`, { status: 'Approved' });
@@ -96,7 +181,7 @@ const CalendarPage = () => {
             <p className="text-sm text-gray-500">Events & Announcements</p>
           </div>
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => isCreator ? setShowForm(true) : openRequestModal()}
             className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
           >
             {isCreator ? '+ Create Event' : '+ Request Event'}
@@ -191,7 +276,7 @@ const CalendarPage = () => {
                       {ev.description && <p className="text-sm text-gray-700 mt-2">{ev.description}</p>}
                       <p className="text-xs text-gray-400 mt-3">Organized by {ev.createdBy?.displayName}</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${ev.status === 'Approved' ? 'bg-green-50 text-green-700 border-green-200' : ev.status === 'Rejected' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
                         {ev.status}
                       </span>
@@ -199,6 +284,9 @@ const CalendarPage = () => {
                         <button onClick={() => handleApprove(ev._id)} className="text-xs bg-white border border-gray-300 hover:border-green-500 text-gray-700 hover:text-green-600 font-medium px-3 py-1 rounded-full transition-colors shadow-sm">
                           Approve
                         </button>
+                      )}
+                      {ev.status === 'Approved' && (
+                        <RsvpButton eventId={ev._id} initialRsvps={ev.rsvps || []} currentUserId={user?._id} />
                       )}
                     </div>
                   </div>
@@ -210,20 +298,14 @@ const CalendarPage = () => {
 
       </div>
 
-      {/* Form Modal */}
+      {/* Create Event Modal (Admins / Clubs) */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={() => setShowForm(false)}>
           <div className="w-full max-w-md bg-white border border-gray-200 rounded-xl shadow-xl p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-gray-900">{isCreator ? 'Create Event' : 'Request Event'}</h2>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-900">✕</button>
+              <h2 className="text-lg font-bold text-gray-900">Create Event</h2>
+              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-900">&#x2715;</button>
             </div>
-
-            {!isCreator && (
-              <p className="text-xs text-orange-800 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2 mb-4">
-                Your request will be reviewed by an Admin before appearing on the calendar.
-              </p>
-            )}
 
             <form onSubmit={handleFormSubmit} className="space-y-4">
               {formError && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{formError}</p>}
@@ -231,27 +313,25 @@ const CalendarPage = () => {
               <input className="input-base" name="title" value={form.title} onChange={e => setForm(p => ({...p, title: e.target.value}))} placeholder="Event Title" required />
               <input className="input-base" name="venue" value={form.venue} onChange={e => setForm(p => ({...p, venue: e.target.value}))} placeholder="Venue" required />
               
-              {isCreator && (
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-                    <input type="radio" name="eventType" value="Offline" checked={form.eventType === 'Offline'} onChange={e => setForm(p => ({...p, eventType: e.target.value, meetingLink: '', passcode: ''}))} className="accent-blue-600" />
-                    Offline
-                  </label>
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-                    <input type="radio" name="eventType" value="Online" checked={form.eventType === 'Online'} onChange={e => setForm(p => ({...p, eventType: e.target.value, mapLink: ''}))} className="accent-blue-600" />
-                    Online
-                  </label>
-                </div>
-              )}
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                  <input type="radio" name="eventType" value="Offline" checked={form.eventType === 'Offline'} onChange={e => setForm(p => ({...p, eventType: e.target.value, meetingLink: '', passcode: ''}))} className="accent-blue-600" />
+                  Offline
+                </label>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                  <input type="radio" name="eventType" value="Online" checked={form.eventType === 'Online'} onChange={e => setForm(p => ({...p, eventType: e.target.value, mapLink: ''}))} className="accent-blue-600" />
+                  Online
+                </label>
+              </div>
 
-              {isCreator && form.eventType === 'Online' && (
+              {form.eventType === 'Online' && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <input className="input-base" name="meetingLink" value={form.meetingLink} onChange={e => setForm(p => ({...p, meetingLink: e.target.value}))} placeholder="Meeting Link (e.g. Zoom/Meet)" />
                   <input className="input-base" name="passcode" value={form.passcode} onChange={e => setForm(p => ({...p, passcode: e.target.value}))} placeholder="Passcode (Optional)" />
                 </div>
               )}
 
-              {isCreator && form.eventType === 'Offline' && (
+              {form.eventType === 'Offline' && (
                 <input className="input-base" name="mapLink" value={form.mapLink} onChange={e => setForm(p => ({...p, mapLink: e.target.value}))} placeholder="Google Maps Link (Optional)" />
               )}
               
@@ -262,12 +342,102 @@ const CalendarPage = () => {
 
               <textarea className="input-base resize-none" name="description" value={form.description} onChange={e => setForm(p => ({...p, description: e.target.value}))} placeholder="Description (optional)" rows={3} maxLength={3000} />
 
-              <div className="flex gap-3 pt-2">
-                <button type="submit" disabled={formLoading} className="w-full btn-primary">
-                  {formLoading ? 'Submitting…' : (isCreator ? 'Create' : 'Request')}
-                </button>
-              </div>
+              <button type="submit" disabled={formLoading} className="w-full btn-primary">
+                {formLoading ? 'Creating…' : 'Create'}
+              </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Request Event Modal (Students only) */}
+      {showRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={() => setShowRequest(false)}>
+          <div className="w-full max-w-md bg-white border border-gray-200 rounded-xl shadow-xl p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-gray-900">Request Event</h2>
+              <button onClick={() => setShowRequest(false)} className="text-gray-400 hover:text-gray-900">&#x2715;</button>
+            </div>
+
+            {reqSuccess ? (
+              <div className="text-center py-8">
+                <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                </div>
+                <h3 className="font-semibold text-gray-900 text-lg mb-1">Request Sent!</h3>
+                <p className="text-sm text-gray-500 mb-6">The selected admin(s) have been notified of your event request.</p>
+                <button onClick={() => setShowRequest(false)} className="btn-primary px-6">Close</button>
+              </div>
+            ) : (
+              <form onSubmit={handleRequestSubmit} className="space-y-4">
+                <p className="text-xs text-orange-800 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
+                  Select the admin(s) you want to notify. They will receive a notification with your request details.
+                </p>
+
+                {reqError && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{reqError}</p>}
+
+                <input
+                  className="input-base"
+                  value={reqForm.title}
+                  onChange={e => setReqForm(p => ({...p, title: e.target.value}))}
+                  placeholder="Proposed Event Title"
+                  required
+                />
+                <input
+                  className="input-base"
+                  type="date"
+                  value={reqForm.date}
+                  onChange={e => setReqForm(p => ({...p, date: e.target.value}))}
+                  required
+                />
+                <textarea
+                  className="input-base resize-none"
+                  value={reqForm.description}
+                  onChange={e => setReqForm(p => ({...p, description: e.target.value}))}
+                  placeholder="Describe the event briefly..."
+                  rows={3}
+                  maxLength={1000}
+                  required
+                />
+
+                <div>
+                  <p className="text-sm font-semibold text-gray-800 mb-2">Notify Admin(s) <span className="text-red-500">*</span></p>
+                  {admins.length === 0 ? (
+                    <p className="text-sm text-gray-400">Loading admins...</p>
+                  ) : (
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                      {admins.map(admin => (
+                        <label key={admin._id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                          selectedAdmins.includes(admin._id)
+                            ? 'border-blue-400 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                        }`}>
+                          <input
+                            type="checkbox"
+                            className="accent-blue-600"
+                            checked={selectedAdmins.includes(admin._id)}
+                            onChange={() => toggleAdminSelect(admin._id)}
+                          />
+                          <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0 overflow-hidden">
+                            {admin.avatarUrl
+                              ? <img src={admin.avatarUrl} alt="" className="w-full h-full object-cover" />
+                              : admin.displayName?.charAt(0)?.toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">{admin.displayName}</p>
+                            <p className="text-xs text-gray-400">{admin.rollNo}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button type="submit" disabled={reqLoading} className="w-full btn-primary">
+                  {reqLoading ? 'Sending…' : 'Send Request'}
+                </button>
+              </form>
+            )}
           </div>
         </div>
       )}

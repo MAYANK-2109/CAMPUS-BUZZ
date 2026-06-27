@@ -37,11 +37,28 @@ const ComplaintSchema = new mongoose.Schema(
     status: {
       type:    String,
       enum:    {
-        values:  ['Open', 'Resolved'],
-        message: 'Status must be Open or Resolved',
+        values:  ['Open', 'Resolved', 'Declined'],
+        message: 'Status must be Open, Resolved, or Declined',
       },
       default: 'Open',
       index:   true,
+    },
+
+    declineReason: {
+      type:    String,
+      default: null,
+      trim:    true,
+      maxlength: [1000, 'Decline reason cannot exceed 1000 characters'],
+    },
+
+    upvotes: {
+      type:    [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
+    },
+
+    isEdited: {
+      type:    Boolean,
+      default: false,
     },
   },
   {

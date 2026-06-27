@@ -84,6 +84,24 @@ router.get('/posts/:id/comments',     protect, interactionController.getComments
 router.post('/posts/:id/comments',    protect, interactionController.addComment);
 router.post('/users/:id/follow',      protect, interactionController.followClub);
 
+// ── GET /api/posts/trending-hashtags ─────────────────────────────────────────
+router.get('/posts/trending-hashtags', protect, async (req, res) => {
+  try {
+    const Post = require('../models/Post');
+    const trends = await Post.aggregate([
+      { $match: { isActive: true, hashtag: { $exists: true } } },
+      { $group: { _id: '$hashtag', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
+      { $project: { hashtag: '$_id', count: 1, _id: 0 } },
+    ]);
+    return res.json({ success: true, data: trends });
+  } catch (err) {
+    console.error('[GET /posts/trending-hashtags]', err);
+    return res.status(500).json({ success: false, data: [] });
+  }
+});
+
 // ════════════════════════════════════════════════════════════════════════════════
 // EVENT routes  (/api/events/…)
 // ════════════════════════════════════════════════════════════════════════════════
@@ -97,21 +115,52 @@ router.post('/users/:id/follow',      protect, interactionController.followClub)
  */
 router.get('/events',                protect,             eventController.getEvents);
 router.post('/events',               protect,             eventController.createEvent);
+router.post('/events/request',       protect,             eventController.requestEvent);
 router.patch('/events/:id/status',   protect, adminOnly,  eventController.updateEventStatus);
 router.delete('/events/:id',         protect, adminOnly,  eventController.deleteEvent);
+
+// ── POST /api/events/:id/rsvp — toggle RSVP ──────────────────────────────────
+router.post('/events/:id/rsvp', protect, async (req, res) => {
+  try {
+    const Event = require('../models/Event');
+    const event = await Event.findById(req.params.id);
+    if (!event) return res.status(404).json({ success: false, message: 'Event not found.' });
+
+    const uid     = req.user._id.toString();
+    const joined  = event.rsvps.map(id => id.toString()).includes(uid);
+
+    if (joined) {
+      event.rsvps = event.rsvps.filter(id => id.toString() !== uid);
+    } else {
+      event.rsvps.push(req.user._id);
+    }
+    await event.save();
+
+    return res.json({ success: true, rsvpCount: event.rsvps.length, rsvped: !joined });
+  } catch (err) {
+    console.error('[POST /events/:id/rsvp]', err);
+    return res.status(500).json({ success: false, message: 'Failed to toggle RSVP.' });
+  }
+});
 
 // ════════════════════════════════════════════════════════════════════════════════
 // COMPLAINT routes  (/api/complaints/…)
 // ════════════════════════════════════════════════════════════════════════════════
 /**
- * GET  /api/complaints      – Students receive list WITHOUT author (anonymised).
- *                             Admins receive list WITH populated author.
- * POST /api/complaints      – any authenticated user
- * PATCH /api/complaints/:id – Admin only: update status (Open / Resolved)
+ * GET  /api/complaints        – Students receive list WITHOUT author (anonymised).
+ *                               Admins receive list WITH populated author.
+ * GET  /api/complaints/search – keyword search for duplicate detection (open to all)
+ * POST /api/complaints        – any authenticated user
+ * POST /api/complaints/:id/upvote – toggle upvote (any authenticated user)
+ * PATCH /api/complaints/:id   – Admin only: update status (Open / Resolved / Declined)
+ * PATCH /api/complaints/:id/edit – Author only: edit title/description
  */
-router.get('/complaints',       protect,            complaintController.getComplaints);
-router.post('/complaints',      protect,            complaintController.createComplaint);
-router.patch('/complaints/:id', protect, adminOnly, complaintController.updateComplaintStatus);
+router.get('/complaints/search',       protect, complaintController.searchComplaints);
+router.get('/complaints',              protect, complaintController.getComplaints);
+router.post('/complaints',             protect, complaintController.createComplaint);
+router.post('/complaints/:id/upvote',  protect, complaintController.upvoteComplaint);
+router.patch('/complaints/:id/edit',   protect, complaintController.editComplaint);
+router.patch('/complaints/:id',        protect, adminOnly, complaintController.updateComplaintStatus);
 
 // ════════════════════════════════════════════════════════════════════════════════
 // CLUBS route  (/api/clubs)  – list all Club/Admin accounts for search & follow
@@ -322,6 +371,23 @@ router.get('/users/search', protect, async (req, res) => {
   } catch (err) {
     console.error('[GET /users/search]', err);
     return res.status(500).json({ success: false, data: [] });
+  }
+});
+
+// ── GET /api/users?role=Admin — list users filtered by role ──────────────────
+router.get('/users', protect, async (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.role) filter.role = req.query.role;
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    const users = await User.find(filter)
+      .select('_id displayName avatarUrl rollNo role')
+      .limit(limit)
+      .lean();
+    return res.json({ success: true, data: users });
+  } catch (err) {
+    console.error('[GET /users]', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch users.' });
   }
 });
 

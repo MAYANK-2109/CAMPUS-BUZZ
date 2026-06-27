@@ -2,17 +2,115 @@
  * src/pages/ComplaintsPage.jsx
  * ─────────────────────────────────────────────────────────────────────────────
  * Anonymous complaints board.
+ * Features: upvotes, similar-complaint detection while filing, author edit.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { ThumbsUp, Pencil, X, Check } from 'lucide-react';
 import api         from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
 const STATUS_STYLES = {
   Open:     'bg-orange-100 text-orange-800 border-orange-200',
   Resolved: 'bg-green-100 text-green-800 border-green-200',
+  Declined: 'bg-red-100 text-red-800 border-red-200',
 };
 
+// Stop words excluded from the similarity search
+const STOP_WORDS = new Set([
+  'a','an','the','is','are','was','were','has','have','had','be','been',
+  'do','does','did','will','would','could','should','may','might','can',
+  'of','in','on','at','to','for','with','by','from','as','and','or','but',
+  'not','this','that','these','those','it','we','i','you','they','he','she',
+]);
+
+const extractKeywords = (text) =>
+  text.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/)
+    .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+
+/* ─── UpvoteButton ─────────────────────────────────────────────────────────── */
+const UpvoteButton = ({ complaintId, initialCount, initialVoted, onUpvoted }) => {
+  const [count,   setCount]   = useState(initialCount);
+  const [voted,   setVoted]   = useState(initialVoted);
+  const [loading, setLoading] = useState(false);
+
+  const toggle = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const { data } = await api.post(`/complaints/${complaintId}/upvote`);
+      setCount(data.upvotes);
+      setVoted(data.upvoted);
+      onUpvoted?.(complaintId, data.upvotes);
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <button
+      onClick={toggle}
+      disabled={loading}
+      className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+        voted
+          ? 'border-blue-400 bg-blue-50 text-blue-700'
+          : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50'
+      }`}
+    >
+      <ThumbsUp className="w-3.5 h-3.5" />
+      {count}
+    </button>
+  );
+};
+
+/* ─── InlineEditForm ───────────────────────────────────────────────────────── */
+const InlineEditForm = ({ complaint, onSaved, onCancel }) => {
+  const [form,  setForm]  = useState({ title: complaint.title, description: complaint.description });
+  const [saving, setSaving] = useState(false);
+  const [err,   setErr]   = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setErr('');
+    try {
+      const { data } = await api.patch(`/complaints/${complaint._id}/edit`, form);
+      onSaved(data.data);
+    } catch (ex) {
+      setErr(ex.response?.data?.message || 'Failed to save.');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <form onSubmit={submit} className="mt-3 space-y-3 border-t border-gray-100 pt-3">
+      {err && <p className="text-xs text-red-600">{err}</p>}
+      <input
+        className="input-base text-sm font-semibold"
+        value={form.title}
+        onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+        maxLength={150}
+        required
+      />
+      <textarea
+        className="input-base resize-none text-sm"
+        value={form.description}
+        onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+        rows={4}
+        maxLength={2000}
+        required
+      />
+      <div className="flex gap-2">
+        <button type="submit" disabled={saving} className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-900 text-white hover:bg-gray-800 transition-colors">
+          <Check className="w-3.5 h-3.5" />{saving ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" onClick={onCancel} className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors">
+          <X className="w-3.5 h-3.5" />Cancel
+        </button>
+      </div>
+    </form>
+  );
+};
+
+/* ─── Main page ────────────────────────────────────────────────────────────── */
 const ComplaintsPage = () => {
   const { user }  = useAuth();
   const isAdmin   = user?.role === 'Admin';
@@ -22,9 +120,22 @@ const ComplaintsPage = () => {
   const [error,      setError]      = useState('');
   const [showForm,   setShowForm]   = useState(false);
   const [filter,     setFilter]     = useState('');
-  const [form, setForm]   = useState({ title: '', description: '' });
+  const [form,       setForm]       = useState({ title: '', description: '' });
   const [submitting, setSubmitting] = useState(false);
   const [formError,  setFormError]  = useState('');
+
+  // Similar complaints (shown while typing title)
+  const [similar,      setSimilar]      = useState([]);
+  const [searchingDup, setSearchingDup] = useState(false);
+  const dupTimer = useRef(null);
+
+  // Declining modal
+  const [declineTarget, setDeclineTarget] = useState(null);
+  const [declineReason, setDeclineReason] = useState('');
+  const [declining,     setDeclining]     = useState(false);
+
+  // Editing
+  const [editingId, setEditingId] = useState(null);
 
   const fetchComplaints = useCallback(async () => {
     setLoading(true);
@@ -43,14 +154,31 @@ const ComplaintsPage = () => {
 
   useEffect(() => { fetchComplaints(); }, [fetchComplaints]);
 
+  // Live duplicate search as user types the title
+  const handleTitleChange = (val) => {
+    setForm(p => ({ ...p, title: val }));
+    clearTimeout(dupTimer.current);
+    const kws = extractKeywords(val);
+    if (kws.length === 0) { setSimilar([]); return; }
+    setSearchingDup(true);
+    dupTimer.current = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/complaints/search?q=${encodeURIComponent(val)}`);
+        setSimilar(data.data || []);
+      } catch { setSimilar([]); }
+      finally { setSearchingDup(false); }
+    }, 400);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     setFormError('');
     try {
       const { data } = await api.post('/complaints', form);
-      setComplaints((prev) => [data.data, ...prev]);
+      setComplaints(prev => [data.data, ...prev]);
       setForm({ title: '', description: '' });
+      setSimilar([]);
       setShowForm(false);
     } catch (err) {
       setFormError(err.response?.data?.message || 'Failed to submit complaint.');
@@ -59,15 +187,41 @@ const ComplaintsPage = () => {
     }
   };
 
-  const handleStatusToggle = async (complaint) => {
-    const newStatus = complaint.status === 'Open' ? 'Resolved' : 'Open';
+  const handleStatusToggle = async (complaint, forceStatus = null) => {
+    const newStatus = forceStatus || (complaint.status === 'Open' ? 'Resolved' : 'Open');
     try {
       const { data } = await api.patch(`/complaints/${complaint._id}`, { status: newStatus });
-      setComplaints((prev) => prev.map((c) => c._id === complaint._id ? data.data : c));
+      setComplaints(prev => prev.map(c => c._id === complaint._id ? data.data : c));
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to update status.');
     }
   };
+
+  const handleDeclineSubmit = async (e) => {
+    e.preventDefault();
+    if (!declineReason.trim()) return;
+    setDeclining(true);
+    try {
+      const { data } = await api.patch(`/complaints/${declineTarget._id}`, { status: 'Declined', declineReason: declineReason.trim() });
+      setComplaints(prev => prev.map(c => c._id === declineTarget._id ? data.data : c));
+      setDeclineTarget(null);
+      setDeclineReason('');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to decline complaint.');
+    } finally {
+      setDeclining(false);
+    }
+  };
+
+  // Upvote directly from the "similar complaints" suggestion panel
+  const handleSimilarUpvote = async (id) => {
+    try {
+      const { data } = await api.post(`/complaints/${id}/upvote`);
+      setSimilar(prev => prev.map(c => c._id === id ? { ...c, upvoteCount: data.upvotes } : c));
+    } catch { /* silent */ }
+  };
+
+  const closeForm = () => { setShowForm(false); setSimilar([]); setForm({ title: '', description: '' }); };
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 pb-12">
@@ -93,22 +247,18 @@ const ComplaintsPage = () => {
         {!isAdmin && (
           <div className="mb-6 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-800 flex items-start gap-3 shadow-sm">
             <span className="text-xl leading-none">🛡️</span>
-            <span>
-              Author information is stripped server-side. Your complaint is fully anonymous.
-            </span>
+            <span>Author information is stripped server-side. Your complaint is fully anonymous.</span>
           </div>
         )}
 
         {/* Filters */}
-        <div className="flex gap-2 mb-6">
-          {['', 'Open', 'Resolved'].map((s) => (
+        <div className="flex gap-2 mb-6 flex-wrap">
+          {['', 'Open', 'Resolved', 'Declined'].map(s => (
             <button
               key={s || 'all'}
               onClick={() => setFilter(s)}
               className={`px-4 py-1.5 text-sm font-semibold rounded-full border transition-all ${
-                filter === s
-                  ? 'bg-gray-900 border-gray-900 text-white'
-                  : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                filter === s ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
             >
               {s || 'All'}
@@ -135,63 +285,208 @@ const ComplaintsPage = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            {complaints.map((c) => (
-              <div key={c._id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap mb-2">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${STATUS_STYLES[c.status]}`}>
-                        {c.status}
-                      </span>
-                      {isAdmin && c.author && (
-                        <span className="text-xs text-gray-500 font-medium">
-                          by {c.author.displayName} ({c.author.rollNo})
+            {complaints.map(c => {
+              const isAuthor  = c.author?._id === user?._id || (!c.author && false); // author is stripped for non-admins
+              const myUpvotes = (c.upvotes || []).map(id => id?.toString()).filter(Boolean);
+              const voted     = myUpvotes.includes(user?._id?.toString());
+              const count     = (c.upvotes || []).length;
+
+              return (
+                <div key={c._id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      {/* Badges row */}
+                      <div className="flex items-center gap-2 flex-wrap mb-2">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${STATUS_STYLES[c.status]}`}>
+                          {c.status}
                         </span>
+                        {c.isEdited && (
+                          <span className="text-[10px] font-semibold text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">edited</span>
+                        )}
+                        {isAdmin && c.author && (
+                          <span className="text-xs text-gray-500 font-medium">
+                            by {c.author.displayName} ({c.author.rollNo})
+                          </span>
+                        )}
+                      </div>
+
+                      {editingId === c._id ? (
+                        <InlineEditForm
+                          complaint={c}
+                          onSaved={updated => {
+                            setComplaints(prev => prev.map(x => x._id === c._id ? { ...x, ...updated } : x));
+                            setEditingId(null);
+                          }}
+                          onCancel={() => setEditingId(null)}
+                        />
+                      ) : (
+                        <>
+                          <h3 className="font-semibold text-gray-900 text-base">{c.title}</h3>
+                          <p className="text-gray-700 text-sm mt-1.5 leading-relaxed">{c.description}</p>
+
+                          {c.status === 'Declined' && c.declineReason && (
+                            <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-900">
+                              <strong className="font-semibold text-red-950 block mb-1">Reason for declination:</strong>
+                              {c.declineReason}
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-3 mt-3">
+                            <p className="text-xs text-gray-400 font-medium">
+                              {new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </p>
+                            {/* Author edit button — only shown when admin has populated author field */}
+                            {isAdmin && c.author && c.author._id === user?._id && (
+                              <button
+                                onClick={() => setEditingId(c._id)}
+                                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900 transition-colors"
+                              >
+                                <Pencil className="w-3 h-3" /> Edit
+                              </button>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
-                    <h3 className="font-semibold text-gray-900 text-base">{c.title}</h3>
-                    <p className="text-gray-700 text-sm mt-1.5 leading-relaxed">{c.description}</p>
-                    <p className="text-xs text-gray-400 mt-3 font-medium">
-                      {new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </p>
-                  </div>
 
-                  {isAdmin && (
-                    <button
-                      onClick={() => handleStatusToggle(c)}
-                      className={`flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
-                        c.status === 'Open'
-                          ? 'border-gray-300 text-gray-700 hover:border-green-500 hover:text-green-600 hover:bg-green-50'
-                          : 'border-gray-300 text-gray-700 hover:border-orange-500 hover:text-orange-600 hover:bg-orange-50'
-                      }`}
-                    >
-                      {c.status === 'Open' ? 'Mark Resolved' : 'Reopen'}
-                    </button>
-                  )}
+                    {/* Right column: upvote + admin actions */}
+                    <div className="flex flex-col gap-2 flex-shrink-0 items-end">
+                      <UpvoteButton
+                        complaintId={c._id}
+                        initialCount={count}
+                        initialVoted={voted}
+                        onUpvoted={(id, newCount) =>
+                          setComplaints(prev => prev.map(x => x._id === id ? { ...x, upvotes: Array(newCount).fill(null) } : x))
+                        }
+                      />
+
+                      {isAdmin && (
+                        <>
+                          {c.status === 'Open' ? (
+                            <>
+                              <button
+                                onClick={() => handleStatusToggle(c, 'Resolved')}
+                                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:border-green-500 hover:text-green-600 hover:bg-green-50 transition-colors"
+                              >
+                                Resolve
+                              </button>
+                              <button
+                                onClick={() => setDeclineTarget(c)}
+                                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:border-red-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              >
+                                Decline
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => handleStatusToggle(c, 'Open')}
+                              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:border-orange-500 hover:text-orange-600 hover:bg-orange-50 transition-colors"
+                            >
+                              Reopen
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Modal */}
+      {/* File Complaint Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={() => setShowForm(false)}>
-          <div className="w-full max-w-md bg-white border border-gray-200 rounded-xl shadow-xl p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={closeForm}>
+          <div className="w-full max-w-lg bg-white border border-gray-200 rounded-xl shadow-xl p-6 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5 border-b border-gray-100 pb-3">
               <h2 className="text-lg font-bold text-gray-900">File a Complaint</h2>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-900">✕</button>
+              <button onClick={closeForm} className="text-gray-400 hover:text-gray-900"><X className="w-5 h-5" /></button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {formError && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{formError}</p>}
-              
-              <input className="input-base font-semibold" value={form.title} onChange={e => setForm(p => ({...p, title: e.target.value}))} placeholder="Subject" maxLength={150} required />
-              <textarea className="input-base resize-none" value={form.description} onChange={e => setForm(p => ({...p, description: e.target.value}))} placeholder="Describe the issue anonymously..." rows={5} maxLength={2000} required />
-              
+
+              {/* Title + live duplicate panel */}
+              <div>
+                <input
+                  className="input-base font-semibold"
+                  value={form.title}
+                  onChange={e => handleTitleChange(e.target.value)}
+                  placeholder="Subject"
+                  maxLength={150}
+                  required
+                />
+
+                {/* Similar complaints panel */}
+                {(searchingDup || similar.length > 0) && (
+                  <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-xs font-bold text-amber-800 mb-2">
+                      {searchingDup ? 'Checking for similar complaints…' : `${similar.length} similar complaint${similar.length > 1 ? 's' : ''} found`}
+                    </p>
+                    {!searchingDup && similar.map(s => (
+                      <div key={s._id} className="flex items-center justify-between gap-3 bg-white border border-amber-100 rounded-lg px-3 py-2 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{s.title}</p>
+                          <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border ${STATUS_STYLES[s.status]}`}>{s.status}</span>
+                          <span className="text-[10px] text-gray-400 ml-2">{s.upvoteCount} upvote{s.upvoteCount !== 1 ? 's' : ''}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSimilarUpvote(s._id)}
+                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0"
+                        >
+                          <ThumbsUp className="w-3 h-3" /> Upvote
+                        </button>
+                      </div>
+                    ))}
+                    {!searchingDup && (
+                      <p className="text-[10px] text-amber-700 mt-1">You can upvote an existing complaint or continue filing your own below.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <textarea
+                className="input-base resize-none"
+                value={form.description}
+                onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+                placeholder="Describe the issue anonymously..."
+                rows={5}
+                maxLength={2000}
+                required
+              />
+
               <button type="submit" disabled={submitting} className="w-full btn-primary bg-gray-900 hover:bg-gray-800 text-white mt-2">
                 {submitting ? 'Submitting…' : 'Submit Anonymously'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Decline Reason Modal */}
+      {declineTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={() => setDeclineTarget(null)}>
+          <div className="w-full max-w-md bg-white border border-gray-200 rounded-xl shadow-xl p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5 border-b border-gray-100 pb-3">
+              <h2 className="text-lg font-bold text-gray-900">Decline Complaint</h2>
+              <button onClick={() => setDeclineTarget(null)} className="text-gray-400 hover:text-gray-900"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleDeclineSubmit} className="space-y-4">
+              <p className="text-sm text-gray-600">Please provide a reason for declining this complaint. This will be visible to the student.</p>
+              <textarea
+                className="input-base resize-none"
+                value={declineReason}
+                onChange={e => setDeclineReason(e.target.value)}
+                placeholder="Reason for declination..."
+                rows={4}
+                maxLength={1000}
+                required
+              />
+              <button type="submit" disabled={declining} className="w-full btn-primary bg-red-600 hover:bg-red-700 text-white mt-2 border-none">
+                {declining ? 'Declining…' : 'Decline Complaint'}
               </button>
             </form>
           </div>

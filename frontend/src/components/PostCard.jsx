@@ -48,8 +48,8 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
   const isAuthor    = userId === post.author?._id;
   const isAdmin     = user?.role === 'Admin';
 
-  const hasLiked    = (post.likes    || []).map(id => id.toString()).includes(userId);
-  const hasDisliked = (post.dislikes || []).map(id => id.toString()).includes(userId);
+  const hasLiked    = (post.likes    || []).map(id => id?.toString()).includes(userId);
+  const hasDisliked = (post.dislikes || []).map(id => id?.toString()).includes(userId);
 
   // ── Like ──────────────────────────────────────────────────────────────────
   const handleLike = async () => {

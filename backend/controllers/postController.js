@@ -73,6 +73,22 @@ exports.createPost = async (req, res) => {
   try {
     const { title, description, imageUrl, hashtag, expiresAt, customTags, totalFare } = req.body;
 
+    // Enforce that every post must have an image
+    if (!imageUrl || !imageUrl.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Every post must include an image.',
+      });
+    }
+
+    // Enforce that every post must have a hashtag
+    if (!hashtag || hashtag === 'None') {
+      return res.status(400).json({
+        success: false,
+        message: 'A hashtag is mandatory for every post.',
+      });
+    }
+
     // expiresAt is required for time-sensitive hashtags
     if (TIMED_HASHTAGS.has(hashtag)) {
       if (!expiresAt) {
@@ -111,7 +127,7 @@ exports.createPost = async (req, res) => {
       description,
       imageUrl:   imageUrl || null,
       author:     req.user._id,
-      hashtag:    hashtag || 'None',
+      hashtag:    hashtag,
       customTags: Array.isArray(customTags) ? customTags : [],
       expiresAt:  TIMED_HASHTAGS.has(hashtag) ? new Date(expiresAt) : null,
       mentions:   mentionIds,
