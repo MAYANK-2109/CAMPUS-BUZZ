@@ -6,12 +6,11 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Heart, ThumbsDown, MessageCircle, Trash2, Bookmark, Share2, MoreHorizontal } from 'lucide-react';
 import HashtagBadge   from './HashtagBadge';
 import CountdownTimer from './CountdownTimer';
 import ContactModal   from './ContactModal';
-import ChatRoom       from '../Chat/ChatRoom';
 import CommentSection from './CommentSection';
 import { useAuth }    from '../context/AuthContext';
 import api            from '../utils/api';
@@ -22,6 +21,7 @@ const TIMED_HASHTAGS   = new Set(['#foodsplit', '#cabsplit']);
 
 const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
   const { user }   = useAuth();
+  const navigate = useNavigate();
   const [post, setPost] = useState(initialPost);
 
   const [showChat,     setShowChat]     = useState(false);
@@ -99,8 +99,15 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
     }
   };
 
-  const handleHashtagAction = () => {
-    if (CHAT_HASHTAGS.has(post.hashtag)) setShowChat(true);
+  const handleHashtagAction = async () => {
+    if (CHAT_HASHTAGS.has(post.hashtag)) {
+      try {
+        const { data } = await api.post(`/rooms/from-post/${post._id}`);
+        navigate(`/chat?room=${data.data._id}`);
+      } catch (err) {
+        alert(err.response?.data?.message || 'Failed to open chat room.');
+      }
+    }
     else if (CONTACT_HASHTAGS.has(post.hashtag)) setShowContact(true);
   };
 
@@ -409,16 +416,7 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
         {showComments && <CommentSection postId={post._id} />}
       </article>
 
-      {showChat && (
-        <ChatRoom
-          postId={post._id}
-          postTitle={post.title}
-          hashtag={post.hashtag}
-          isAuthor={isAuthor}
-          onClose={() => setShowChat(false)}
-          onRoomClosed={() => { setRoomClosed(true); setShowChat(false); }}
-        />
-      )}
+      {/* Chat modal has been migrated to global Chat Hub */}
       {showContact && (
         <ContactModal post={post} onClose={() => setShowContact(false)} />
       )}

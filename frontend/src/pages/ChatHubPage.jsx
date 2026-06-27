@@ -15,7 +15,7 @@
 import React, {
   useState, useEffect, useRef, useCallback,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { Search, Plus, SendHorizonal, X, Hash, Users, MessageSquare, FileText, ExternalLink } from 'lucide-react';
 import api from '../utils/api';
@@ -153,6 +153,7 @@ const ChatHubPage = () => {
   const { user } = useAuth();
   const { socket, connected } = useSocket();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Rooms state
   const [rooms, setRooms] = useState([]);
@@ -191,6 +192,8 @@ const ChatHubPage = () => {
   }, []);
 
   useEffect(() => { fetchRooms(); }, [fetchRooms]);
+
+  // ── Auto-selection will be defined below handleSelectRoom
 
   // ── Socket listeners ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -292,6 +295,20 @@ const ChatHubPage = () => {
 
     setTimeout(() => inputRef.current?.focus(), 150);
   }, [activeRoom, socket, connected, navigate]);
+
+  // ── Auto-select room from URL ──────────────────────────────────────────────
+  useEffect(() => {
+    if (rooms.length > 0 && !activeRoom) {
+      const params = new URLSearchParams(location.search);
+      const roomId = params.get('room');
+      if (roomId) {
+        const targetRoom = rooms.find(r => r._id === roomId);
+        if (targetRoom) {
+          handleSelectRoom(targetRoom);
+        }
+      }
+    }
+  }, [rooms, activeRoom, location.search, handleSelectRoom]);
 
   // ── Send message ─────────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {

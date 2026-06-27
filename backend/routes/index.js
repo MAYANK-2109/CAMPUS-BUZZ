@@ -226,6 +226,35 @@ router.post('/rooms', protect, async (req, res) => {
   }
 });
 
+// ── POST /api/rooms/from-post/:postId — find or create a global room for a post ──
+router.post('/rooms/from-post/:postId', protect, async (req, res) => {
+  try {
+    const Post = require('../models/Post');
+    const post = await Post.findById(req.params.postId);
+    if (!post) return res.status(404).json({ success: false, message: 'Post not found.' });
+
+    // Look for an existing room for this post
+    let room = await ChatRoom.findOne({ postId: post._id, isActive: true });
+    
+    if (!room) {
+      room = await ChatRoom.create({
+        isGlobal:      true,
+        postId:        post._id,
+        name:          post.title,
+        hashtag:       post.hashtag || '#general',
+        createdBy:     post.author,
+        isActive:      true,
+        lastMessageAt: new Date(),
+      });
+    }
+
+    return res.status(200).json({ success: true, data: room });
+  } catch (err) {
+    console.error('[POST /rooms/from-post]', err);
+    return res.status(500).json({ success: false, message: 'Failed to find or create room for post.' });
+  }
+});
+
 // ── DELETE /api/rooms/:id — close a global room ──────────────────────────────
 router.delete('/rooms/:id', protect, async (req, res) => {
   try {

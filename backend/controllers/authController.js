@@ -145,8 +145,8 @@ exports.forgotPassword = async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     // Create reset url
-    // Usually req.protocol + '://' + req.get('host') but since frontend is separate we should use a frontend URL from env, or hardcode typical dev
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    // Use CLIENT_URL from env or fallback to localhost:3000
+    const frontendUrl = process.env.CLIENT_URL || 'http://localhost:3000';
     const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
 
     const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please make a PUT request to: \n\n ${resetUrl}`;
