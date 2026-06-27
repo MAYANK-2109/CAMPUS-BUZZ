@@ -48,6 +48,14 @@
 - [⏰ Background Jobs](#-background-jobs)
 - [🚀 Deployment](#-deployment)
 
+  ---
+
+## ✨ Google Drive Video Link
+
+https://drive.google.com/drive/folders/12sLIhtUqlvR8WThyVVnPdKA7BpHnj9MX?usp=drive_link
+
+---
+
 ---
 
 ## ✨ What is Campus Buzz?
