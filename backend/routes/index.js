@@ -72,18 +72,6 @@ router.get( '/auth/me',       protect, authController.getMe);
  */
 router.get('/posts',      protect, postController.getPosts);
 router.post('/posts',     protect, postController.createPost);
-router.get('/posts/:id',  protect, postController.getPostById);
-router.patch('/posts/:id',  protect, postController.updatePost);
-router.delete('/posts/:id', protect, postController.deletePost);
-
-// Post interactions
-router.post('/posts/:id/like',        protect, interactionController.toggleLike);
-router.post('/posts/:id/dislike',     protect, interactionController.toggleDislike);
-router.post('/posts/:id/save',        protect, interactionController.toggleSavePost);
-router.get('/posts/:id/comments',     protect, interactionController.getComments);
-router.post('/posts/:id/comments',    protect, interactionController.addComment);
-router.post('/users/:id/follow',      protect, interactionController.followClub);
-
 // ── GET /api/posts/trending-hashtags ─────────────────────────────────────────
 router.get('/posts/trending-hashtags', protect, async (req, res) => {
   try {
@@ -101,6 +89,59 @@ router.get('/posts/trending-hashtags', protect, async (req, res) => {
     return res.status(500).json({ success: false, data: [] });
   }
 });
+
+router.get('/posts/:id',  protect, postController.getPostById);
+router.patch('/posts/:id',  protect, postController.updatePost);
+router.delete('/posts/:id', protect, postController.deletePost);
+
+// Post interactions
+router.post('/posts/:id/like',        protect, interactionController.toggleLike);
+router.post('/posts/:id/dislike',     protect, interactionController.toggleDislike);
+router.post('/posts/:id/save',        protect, interactionController.toggleSavePost);
+router.get('/posts/:id/comments',     protect, interactionController.getComments);
+router.post('/posts/:id/comments',    protect, interactionController.addComment);
+router.post('/users/:id/follow',      protect, interactionController.followClub);
+
+// ── POST /api/posts/:id/report — flag a post for admin review ────────────────
+// Any authenticated non-author user can report a post.
+// A 'report' notification is sent to every Admin account.
+router.post('/posts/:id/report', protect, async (req, res) => {
+  try {
+    const Post = require('../models/Post');
+    const post = await Post.findById(req.params.id).select('_id title author isActive');
+    if (!post || !post.isActive) {
+      return res.status(404).json({ success: false, message: 'Post not found.' });
+    }
+
+    // Authors cannot report their own posts
+    if (post.author.toString() === req.user._id.toString()) {
+      return res.status(400).json({ success: false, message: 'You cannot report your own post.' });
+    }
+
+    // Fetch all Admin user IDs
+    const admins = await User.find({ role: 'Admin' }).select('_id').lean();
+    if (!admins.length) {
+      // No admins to notify — still acknowledge the report gracefully
+      return res.status(200).json({ success: true, message: 'Report submitted.' });
+    }
+
+    // Fan-out a notification to each Admin
+    const notifs = admins.map(admin => ({
+      recipient: admin._id,
+      sender:    req.user._id,
+      type:      'report',
+      post:      post._id,
+      message:   `${req.user.displayName} reported a post: "${post.title}"`,
+    }));
+    await Notification.insertMany(notifs);
+
+    return res.status(200).json({ success: true, message: 'Report submitted. Our team will review it.' });
+  } catch (err) {
+    console.error('[POST /posts/:id/report]', err);
+    return res.status(500).json({ success: false, message: 'Failed to submit report.' });
+  }
+});
+
 
 // ════════════════════════════════════════════════════════════════════════════════
 // EVENT routes  (/api/events/…)

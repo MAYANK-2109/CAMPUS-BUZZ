@@ -26,7 +26,6 @@ const ChatRoomSchema = new mongoose.Schema(
     postId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Post',
-      unique: false,           // sparse unique enforced below
       index: true,
       default: null,
     },

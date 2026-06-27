@@ -7,7 +7,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Link, useNavigate } from 'react-router-dom';
-import { Heart, ThumbsDown, MessageCircle, Trash2, Bookmark, Share2, MoreHorizontal } from 'lucide-react';
+import { Heart, ThumbsDown, MessageCircle, Trash2, Bookmark, Share2, MoreHorizontal, Flag } from 'lucide-react';
 import HashtagBadge   from './HashtagBadge';
 import CountdownTimer from './CountdownTimer';
 import ContactModal   from './ContactModal';
@@ -35,6 +35,9 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
   const [saving,       setSaving]       = useState(false);
   const [shareToast,   setShareToast]   = useState(false);
   const [showMenu,     setShowMenu]     = useState(false);
+  const [reporting,    setReporting]    = useState(false);
+  const [reportDone,   setReportDone]   = useState(false);
+  const [reportToast,  setReportToast]  = useState(false);
   const menuRef = useRef(null);
 
   // Close menu on outside click
@@ -84,6 +87,22 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
       }));
     } catch (err) { console.error(err); }
     finally { setDisliking(false); }
+  };
+
+  // ── Report ───────────────────────────────────────────────────────────────
+  const handleReport = async () => {
+    if (reporting || reportDone) return;
+    setReporting(true);
+    try {
+      await api.post(`/posts/${post._id}/report`);
+      setReportDone(true);
+      setReportToast(true);
+      setTimeout(() => setReportToast(false), 3000);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to submit report.');
+    } finally {
+      setReporting(false);
+    }
   };
 
   // ── Delete ────────────────────────────────────────────────────────────────
@@ -233,29 +252,62 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
             </div>
           </div>
 
-          {/* Options — 3-dot context menu */}
-          {!hideDelete && (isAuthor || isAdmin) && (
+          {/* Options — 3-dot context menu: Delete (author/admin) + Report (non-author) */}
+          {!hideDelete && (
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setShowMenu(v => !v)}
                 className="p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
                 title="More options"
+                id={`post-menu-${post._id}`}
               >
                 <MoreHorizontal className="w-5 h-5" />
               </button>
               {showMenu && (
-                <div className="absolute right-0 top-8 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[140px] animate-[fadeIn_0.1s_ease_forwards]">
-                  <button
-                    onClick={() => { setShowMenu(false); handleDelete(); }}
-                    disabled={deleting}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors font-medium"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    {deleting ? 'Deleting…' : 'Delete Post'}
-                  </button>
+                <div className="absolute right-0 top-8 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px] animate-[fadeIn_0.1s_ease_forwards]">
+                  {/* Delete — only author or admin */}
+                  {(isAuthor || isAdmin) && (
+                    <button
+                      onClick={() => { setShowMenu(false); handleDelete(); }}
+                      disabled={deleting}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors font-medium"
+                      id={`post-delete-${post._id}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      {deleting ? 'Deleting…' : 'Delete Post'}
+                    </button>
+                  )}
+                  {/* Report — only non-authors */}
+                  {!isAuthor && (
+                    <button
+                      onClick={() => { setShowMenu(false); handleReport(); }}
+                      disabled={reporting || reportDone}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors font-medium ${
+                        reportDone
+                          ? 'text-gray-400 cursor-default'
+                          : 'text-amber-600 hover:bg-amber-50'
+                      }`}
+                      id={`post-report-${post._id}`}
+                    >
+                      <Flag className="w-4 h-4" />
+                      {reportDone ? 'Reported ✓' : reporting ? 'Reporting…' : 'Report Post'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
+          )}
+
+          {/* Report submitted toast */}
+          {reportToast && (
+            <span
+              className="absolute right-0 -bottom-8 whitespace-nowrap
+                         text-[11px] font-medium bg-amber-700 text-white px-2.5 py-1
+                         rounded-full shadow-lg pointer-events-none z-40
+                         animate-[fadeIn_0.15s_ease_forwards]"
+            >
+              🚩 Report submitted
+            </span>
           )}
         </div>
 

@@ -35,8 +35,11 @@ exports.getComplaints = async (req, res) => {
     if (isAdmin) {
       // Populate author details for Admin
       query = query.populate('author', 'displayName rollNo instituteEmail role');
+    } else {
+      // Defence-in-depth: exclude author at the DB projection level for non-Admins.
+      // The serialisation step below also deletes obj.author — two independent layers.
+      query = query.select('-author');
     }
-    // For non-Admins: do NOT populate author (keep field as ObjectId only)
 
     const [complaints, total] = await Promise.all([
       query.exec(),

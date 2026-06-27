@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Heart, MessageCircle, ThumbsDown, UserPlus, Bell, AtSign, Megaphone, CalendarPlus, Timer } from 'lucide-react';
+import { Heart, MessageCircle, ThumbsDown, UserPlus, Bell, AtSign, Megaphone, CalendarPlus, Timer, Flag } from 'lucide-react';
 import api from '../utils/api';
 
 const TYPE_ICON = {
@@ -17,6 +17,7 @@ const TYPE_ICON = {
   announcement:  { Icon: Megaphone,     bg: 'bg-yellow-100',  text: 'text-yellow-600' },
   event_request:  { Icon: CalendarPlus,  bg: 'bg-violet-100',  text: 'text-violet-600' },
   expiry_warning: { Icon: Timer,          bg: 'bg-amber-100',   text: 'text-amber-600'  },
+  report:         { Icon: Flag,           bg: 'bg-red-100',     text: 'text-red-600'    },
 };
 
 const NotificationsPage = () => {
