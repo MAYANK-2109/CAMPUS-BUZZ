@@ -18,7 +18,7 @@ import React, {
 } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
-import { Search, Plus, SendHorizonal, X, Hash, Users, MessageSquare, FileText, ExternalLink, ChevronRight, ChevronDown } from 'lucide-react';
+import { Search, Plus, SendHorizonal, X, Hash, Users, MessageSquare, FileText, ExternalLink, ChevronRight, ChevronDown, ChevronLeft } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -392,12 +392,31 @@ const ChatHubPage = () => {
   // ── Send message ─────────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
     const text = msgText.trim();
-    if (!text || !activeRoom || !socket || roomClosed || sending) return;
+    if (!text || !activeRoom || roomClosed || sending) return;
+    
+    // Optimistic UI Update
+    const tempId = 'temp-' + Date.now();
+    const optimisticMsg = {
+      _id: tempId,
+      text,
+      senderId: user,
+      timestamp: new Date().toISOString(),
+      _type: 'msg',
+      isOptimistic: true
+    };
+    setMessages(prev => [...prev, optimisticMsg]);
+    setMsgText(''); // Clear input immediately
+    
+    if (socket && !connected) {
+      socket.connect(); // Force reconnect attempt
+    }
+
     setSending(true);
-    socket.emit('sendGlobalMsg', { roomId: activeRoom._id, text });
-    setMsgText('');
+    if (socket) {
+      socket.emit('sendGlobalMsg', { roomId: activeRoom._id, text });
+    }
     setSending(false);
-  }, [msgText, activeRoom, socket, roomClosed, sending]);
+  }, [msgText, activeRoom, socket, roomClosed, sending, connected, user]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -580,8 +599,20 @@ const ChatHubPage = () => {
         ) : (
           <>
             {/* Header */}
+            {!connected && (
+              <div style={{ background: '#fef2f2', color: '#ef4444', fontSize: 13, padding: '8px 12px', textAlign: 'center', fontWeight: 500, borderBottom: '1px solid #fee2e2' }}>
+                Reconnecting to chat...
+              </div>
+            )}
             <div className="ch-chat-header">
               <div className="ch-chat-title">
+                <button 
+                  className="md:hidden mr-2 p-1 -ml-2 rounded-full hover:bg-gray-100 text-gray-500" 
+                  onClick={() => setActiveRoom(null)}
+                  aria-label="Back to rooms"
+                >
+                  <ChevronLeft size={20} />
+                </button>
                 <span style={{ fontSize: 20 }}>{hashtagEmoji(activeRoom.hashtag)}</span>
                 {activeRoom.name}
                 <span style={{ fontSize: 12, color: '#72767d', fontWeight: 400 }}>{activeRoom.hashtag}</span>
@@ -673,8 +704,8 @@ const ChatHubPage = () => {
 
                           <div className="ch-msg-bubble">
                             <div className="ch-msg-text">{item.text}</div>
-                            <div className="ch-msg-time-inline">{msgTime}</div>
                           </div>
+                          <div className="ch-msg-time-below">{msgTime}</div>
                         </div>
                       </div>
                     );
@@ -705,22 +736,17 @@ const ChatHubPage = () => {
                     onChange={(e) => setMsgText(e.target.value)}
                     onKeyDown={handleKeyDown}
                     maxLength={1000}
-                    disabled={sending || !connected}
+                    disabled={sending}
                   />
                   <button
                     className="ch-send-btn"
                     onClick={handleSend}
-                    disabled={!msgText.trim() || sending || !connected}
+                    disabled={!msgText.trim() || sending}
                     aria-label="Send message"
                   >
                     <SendHorizonal size={18} />
                   </button>
                 </div>
-                {!connected && (
-                  <div style={{ fontSize: 11, color: '#ed4245', marginTop: 4, paddingLeft: 4 }}>
-                    ● Reconnecting…
-                  </div>
-                )}
               </div>
             )}
           </>

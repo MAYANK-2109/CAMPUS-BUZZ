@@ -182,7 +182,13 @@ const Navbar = () => {
       {/* ═══════════════════════════════════════════════════════════
           MOBILE  –  Bottom tab bar
           ═══════════════════════════════════════════════════════════ */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-gray-200 flex items-center justify-around px-2 pb-safe">
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-gray-200 flex items-center justify-around px-1"
+        style={{
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          minHeight: 56,
+        }}
+      >
         {NAV_ITEMS.map(({ label, to, Icon }) => (
           <NavLink
             key={to}
