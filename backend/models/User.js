@@ -100,6 +100,12 @@ const UserSchema = new mongoose.Schema(
 
     resetPasswordToken: String,
     resetPasswordExpire: Date,
+
+    // ── Email OTP verification (signup) ──────────────────────────────────────
+    otpHash:       { type: String, select: false }, // sha256 of the 6-digit code
+    otpExpire:     Date,
+    otpAttempts:   { type: Number, default: 0 },     // wrong-attempt counter
+    lastOtpSentAt: Date,                             // for resend throttling
   },
   {
     timestamps: true,   // createdAt, updatedAt
@@ -142,9 +148,27 @@ UserSchema.methods.getResetPasswordToken = function() {
   return resetToken;
 };
 
-// ── Static helper: find by email (selects passwordHash explicitly) ───────────
+// ── Instance method: generate a 6-digit OTP, store its hash + expiry ─────────
+UserSchema.methods.generateOtp = function generateOtp() {
+  const otp = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+  this.otpHash       = crypto.createHash('sha256').update(otp).digest('hex');
+  this.otpExpire     = Date.now() + 10 * 60 * 1000; // 10 minutes
+  this.otpAttempts   = 0;
+  this.lastOtpSentAt = new Date();
+  return otp;
+};
+
+// ── Instance method: validate a candidate OTP (hash compare + not expired) ───
+UserSchema.methods.verifyOtp = function verifyOtp(candidate) {
+  if (!this.otpHash || !this.otpExpire) return false;
+  if (new Date(this.otpExpire).getTime() < Date.now()) return false;
+  const hash = crypto.createHash('sha256').update(String(candidate)).digest('hex');
+  return hash === this.otpHash;
+};
+
+// ── Static helper: find by email (selects passwordHash + otpHash explicitly) ─
 UserSchema.statics.findByEmailWithPassword = function findByEmailWithPassword(email) {
-  return this.findOne({ instituteEmail: email.toLowerCase() }).select('+passwordHash');
+  return this.findOne({ instituteEmail: email.toLowerCase() }).select('+passwordHash +otpHash');
 };
 
 module.exports = mongoose.model('User', UserSchema);

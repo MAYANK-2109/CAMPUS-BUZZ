@@ -21,6 +21,22 @@ const signToken = (user) =>
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   );
 
+// ── Helper: generate a fresh OTP for a user and email it ─────────────────────
+const issueAndSendOtp = async (user) => {
+  const otp = user.generateOtp();
+  await user.save({ validateBeforeSave: false });
+
+  await sendEmail({
+    email:   user.instituteEmail,
+    subject: 'Your CampusBuzz verification code',
+    message:
+      `Welcome to CampusBuzz!\n\n` +
+      `Your email verification code is: ${otp}\n\n` +
+      `This code will expire in 10 minutes. ` +
+      `If you did not create an account, you can safely ignore this email.`,
+  });
+};
+
 // ── Helper: send sanitised response (never expose passwordHash) ──────────────
 const sendAuthResponse = (res, statusCode, user, token) => {
   const safeUser = {
@@ -46,35 +62,53 @@ const sendAuthResponse = (res, statusCode, user, token) => {
 exports.register = async (req, res) => {
   try {
     const { rollNo, instituteEmail, password, role, displayName } = req.body;
+    const email = instituteEmail?.toLowerCase();
+    const roll  = rollNo ? rollNo.toUpperCase() : undefined;
 
-    // Check for duplicate email or roll number
-    const query = [{ instituteEmail: instituteEmail?.toLowerCase() }];
-    if (rollNo) {
-      query.push({ rollNo: rollNo?.toUpperCase() });
+    // An account with this email may already exist.
+    const existingByEmail = await User.findOne({ instituteEmail: email }).select('+otpHash');
+    if (existingByEmail) {
+      // Verified → genuine duplicate.
+      if (existingByEmail.isVerified) {
+        return res.status(409).json({ success: false, message: 'Email already registered.' });
+      }
+      // Unverified → a previous, incomplete signup. Re-send a code so the
+      // user can finish verifying instead of being blocked.
+      await issueAndSendOtp(existingByEmail);
+      return res.status(200).json({
+        success:             true,
+        requiresVerification: true,
+        instituteEmail:      email,
+        message:             'This email is already registered but not verified. A new code has been sent.',
+      });
     }
 
-    const existing = await User.findOne({ $or: query });
-
-    if (existing) {
-      const field = existing.rollNo && rollNo && existing.rollNo === rollNo.toUpperCase() ? 'Roll number' : 'Email';
-      return res.status(409).json({
-        success: false,
-        message: `${field} already registered.`,
-      });
+    // Roll number must be unique across all accounts.
+    if (roll) {
+      const rollTaken = await User.findOne({ rollNo: roll });
+      if (rollTaken) {
+        return res.status(409).json({ success: false, message: 'Roll number already registered.' });
+      }
     }
 
     // passwordHash field triggers the pre-save bcrypt hook in User model
     const user = await User.create({
-      rollNo:         rollNo ? rollNo.toUpperCase() : undefined,
-      instituteEmail: instituteEmail.toLowerCase(),
+      rollNo:         roll,
+      instituteEmail: email,
       passwordHash:   password,       // Hook will hash this
       role:           role || 'Student',
       displayName:    displayName || rollNo,
       isVerified:     false,
     });
 
-    const token = signToken(user);
-    return sendAuthResponse(res, 201, user, token);
+    // Email a verification code; user is NOT logged in until verified.
+    await issueAndSendOtp(user);
+    return res.status(201).json({
+      success:             true,
+      requiresVerification: true,
+      instituteEmail:      email,
+      message:             'Verification code sent to your email.',
+    });
   } catch (err) {
     console.error('[authController.register]', err);
 
@@ -116,6 +150,23 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials.' });
     }
 
+    // Email-verification gate.
+    if (!user.isVerified) {
+      if (user.otpHash) {
+        // Pending verification from the new signup flow → re-send a fresh code.
+        await issueAndSendOtp(user);
+        return res.status(403).json({
+          success:             false,
+          requiresVerification: true,
+          instituteEmail:      user.instituteEmail,
+          message:             'Please verify your email. A new code has been sent.',
+        });
+      }
+      // Legacy account created before OTP existed → auto-verify on login.
+      user.isVerified = true;
+      await user.save({ validateBeforeSave: false });
+    }
+
     const token = signToken(user);
     return sendAuthResponse(res, 200, user, token);
   } catch (err) {
@@ -128,6 +179,82 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
   // req.user is attached by the protect middleware
   return res.status(200).json({ success: true, user: req.user });
+};
+
+// ── POST /api/auth/verify-otp ────────────────────────────────────────────────
+exports.verifyOtp = async (req, res) => {
+  try {
+    const { instituteEmail, otp } = req.body;
+    if (!instituteEmail || !otp) {
+      return res.status(400).json({ success: false, message: 'Email and code are required.' });
+    }
+
+    const user = await User.findOne({ instituteEmail: instituteEmail.toLowerCase() }).select('+otpHash');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'No account found for this email.' });
+    }
+
+    // Already verified → just log them in.
+    if (user.isVerified) {
+      return sendAuthResponse(res, 200, user, signToken(user));
+    }
+
+    if (!user.otpHash || !user.otpExpire || new Date(user.otpExpire).getTime() < Date.now()) {
+      return res.status(400).json({ success: false, message: 'Code has expired. Please request a new one.' });
+    }
+
+    if (user.otpAttempts >= 5) {
+      return res.status(429).json({ success: false, message: 'Too many incorrect attempts. Please request a new code.' });
+    }
+
+    if (!user.verifyOtp(otp)) {
+      user.otpAttempts += 1;
+      await user.save({ validateBeforeSave: false });
+      return res.status(400).json({ success: false, message: 'Invalid verification code.' });
+    }
+
+    // Success → mark verified and clear OTP state.
+    user.isVerified  = true;
+    user.otpHash     = undefined;
+    user.otpExpire   = undefined;
+    user.otpAttempts = 0;
+    await user.save({ validateBeforeSave: false });
+
+    return sendAuthResponse(res, 200, user, signToken(user));
+  } catch (err) {
+    console.error('[authController.verifyOtp]', err);
+    return res.status(500).json({ success: false, message: 'Verification failed.' });
+  }
+};
+
+// ── POST /api/auth/resend-otp ────────────────────────────────────────────────
+exports.resendOtp = async (req, res) => {
+  try {
+    const { instituteEmail } = req.body;
+    if (!instituteEmail) {
+      return res.status(400).json({ success: false, message: 'Email is required.' });
+    }
+
+    const user = await User.findOne({ instituteEmail: instituteEmail.toLowerCase() }).select('+otpHash');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'No account found for this email.' });
+    }
+    if (user.isVerified) {
+      return res.status(400).json({ success: false, message: 'This account is already verified. Please log in.' });
+    }
+
+    // Throttle resends to once every 30 seconds.
+    if (user.lastOtpSentAt && Date.now() - new Date(user.lastOtpSentAt).getTime() < 30 * 1000) {
+      const wait = Math.ceil((30 * 1000 - (Date.now() - new Date(user.lastOtpSentAt).getTime())) / 1000);
+      return res.status(429).json({ success: false, message: `Please wait ${wait}s before requesting a new code.` });
+    }
+
+    await issueAndSendOtp(user);
+    return res.status(200).json({ success: true, message: 'A new verification code has been sent.' });
+  } catch (err) {
+    console.error('[authController.resendOtp]', err);
+    return res.status(500).json({ success: false, message: 'Failed to resend code.' });
+  }
 };
 
 // ── POST /api/auth/forgot-password ───────────────────────────────────────────
