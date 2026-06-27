@@ -299,15 +299,19 @@
 }
 
 /* ── Mobile bottom safe area ──────────────────────────────────────────────── */
+/* Default (no support) — ensure class exists */
+.pb-safe { padding-bottom: 0; }
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 }
-.pb-safe { padding-bottom: 0; }
 
 /* ── Mobile body padding for bottom tab bar ─────────────────────────────── */
 @media (max-width: 767px) {
-  .cb-feed-col { padding-bottom: 72px; }
+  /* Regular pages: pad so content isn't behind the fixed bottom nav (~56px + safe-area) */
+  .cb-feed-col { padding-bottom: 80px; }
+  /* Note: ch-shell height is handled in the @media block in the chat section below */
 }
+
 
 /* ══════════════════════════════════════════════════════════════════════════════
    PROFESSIONAL CHAT HUB (LIGHT THEME)
@@ -318,10 +322,16 @@
   display: flex;
   flex: 1;
   width: 100%;
+  /* 100dvh accounts for mobile browser UI chrome (address bar, etc.) */
+  height: 100dvh;
+  /* Fallback for browsers that don't support dvh */
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: #ffffff;
   color: #111827;
+  /* Prevent any horizontal overflow */
+  max-width: 100vw;
 }
 
 /* ── Rooms sidebar */
@@ -333,6 +343,8 @@
   background: #f9fafb;
   border-right: 1px solid #e5e7eb;
   overflow: hidden;
+  /* Ensure no horizontal overflow leaks */
+  min-width: 0;
 }
 
 .ch-rooms-header {
@@ -389,15 +401,18 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  border-radius: 6px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 12px;
   cursor: pointer;
-  transition: background 0.15s;
-  margin-bottom: 2px;
+  transition: all 0.2s;
+  margin-bottom: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
 }
-.ch-room-item:hover        { background: #f3f4f6; }
-.ch-room-item--active      { background: #e5e7eb; }
-.ch-room-item--active .ch-room-name { color: #111827; font-weight: 600; }
+.ch-room-item:hover        { border-color: #d1d5db; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+.ch-room-item--active      { background: #e0e7ff; border-color: #4f46e5; box-shadow: 0 2px 4px rgba(79,70,229,0.1); }
+.ch-room-item--active .ch-room-name { color: #4338ca; font-weight: 600; }
 
 /* Post-linked room variant — subtle dashed left border to distinguish */
 .ch-room-item--post {
@@ -465,6 +480,9 @@
   gap: 8px;
   transition: background 0.15s;
   flex-shrink: 0;
+  /* Ensure it doesn't shrink on mobile */
+  width: calc(100% - 24px);
+  box-sizing: border-box;
 }
 .ch-create-btn:hover { background: #4338ca; }
 
@@ -474,7 +492,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: #ffffff;
+  background: #f9fafb;
 }
 
 .ch-chat-header {
@@ -590,7 +608,7 @@
 
 /* The Bubble */
 .ch-msg-bubble {
-  padding: 8px 14px;
+  padding: 10px 16px;
   font-size: 15px;
   line-height: 1.5;
   word-break: break-word;
@@ -598,39 +616,43 @@
   display: flex;
   flex-direction: column;
   position: relative;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 .ch-msg-other .ch-msg-bubble {
-  background: rgba(243, 244, 246, 0.9);
+  background: #ffffff;
   color: #111827;
-  border: 1px solid rgba(229, 231, 235, 0.5);
-  border-radius: 20px 20px 20px 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px 18px 18px 4px;
 }
 .ch-msg-own .ch-msg-bubble {
   background: #4f46e5;
   color: #ffffff;
-  border-radius: 20px 20px 4px 20px;
+  border-radius: 18px 18px 4px 18px;
 }
 
 .ch-msg-consecutive.ch-msg-other .ch-msg-bubble {
-  border-radius: 4px 20px 20px 4px;
+  border-radius: 4px 18px 18px 4px;
 }
 .ch-msg-consecutive.ch-msg-own .ch-msg-bubble {
-  border-radius: 20px 4px 4px 20px;
+  border-radius: 18px 4px 4px 18px;
 }
 .ch-msg-first.ch-msg-other .ch-msg-bubble {
-  border-radius: 20px 20px 20px 4px;
+  border-radius: 18px 18px 18px 4px;
 }
 .ch-msg-first.ch-msg-own .ch-msg-bubble {
-  border-radius: 20px 20px 4px 20px;
+  border-radius: 18px 18px 4px 18px;
 }
 
-.ch-msg-time-inline {
-  font-size: 10px;
+.ch-msg-time-below {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 4px;
+}
+.ch-msg-own .ch-msg-time-below {
   align-self: flex-end;
-  margin-top: 2px;
-  margin-bottom: -2px;
-  margin-right: -4px;
-  opacity: 0.7;
+}
+.ch-msg-other .ch-msg-time-below {
+  align-self: flex-start;
 }
 
 .ch-date-divider {
@@ -654,20 +676,22 @@
 .ch-input-wrap {
   padding: 0 20px 20px;
   flex-shrink: 0;
+  background: #f9fafb;
 }
 .ch-input-inner {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: #f9fafb;
+  background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 12px 16px;
+  border-radius: 9999px; /* Pill shape */
+  padding: 8px 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .ch-input-inner:focus-within {
   border-color: #4f46e5;
-  box-shadow: 0 0 0 1px #4f46e5;
+  box-shadow: 0 0 0 1px #4f46e5, 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 .ch-input-field {
   flex: 1;
@@ -677,22 +701,23 @@
   font-size: 15px;
   color: #111827;
   min-width: 0;
+  padding: 4px 0;
 }
 .ch-input-field::placeholder { color: #9ca3af; }
 .ch-send-btn {
-  background: transparent;
+  background: #4f46e5;
   border: none;
   cursor: pointer;
-  color: #4f46e5;
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px;
-  border-radius: 6px;
-  transition: background 0.15s, color 0.15s;
+  padding: 8px;
+  border-radius: 50%;
+  transition: background 0.15s, transform 0.1s;
 }
-.ch-send-btn:hover           { background: #e0e7ff; color: #4338ca; }
-.ch-send-btn:disabled        { color: #d1d5db; cursor: not-allowed; background: transparent; }
+.ch-send-btn:hover           { background: #4338ca; transform: scale(1.05); }
+.ch-send-btn:disabled        { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; transform: none; }
 
 /* ── Empty state */
 .ch-empty {
@@ -847,14 +872,113 @@
 }
 .ch-msg-animate { animation: ch-fade-in 0.2s ease-out; }
 
-/* ── Mobile: hide rooms panel; show full chat on selection */
+/* ── Mobile: stack sidebar on top, chat below, respect bottom nav ────────── */
 @media (max-width: 767px) {
-  .ch-shell { flex-direction: column; }
+  /* Stack vertically */
+  .ch-shell {
+    flex-direction: column;
+    /* On mobile: full dynamic viewport height minus the bottom nav (64px) */
+    height: calc(100dvh - 64px);
+    height: calc(100vh - 64px); /* fallback */
+    height: calc(100dvh - 64px);
+    /* Ensure it never causes horizontal scroll */
+    width: 100%;
+    overflow: hidden;
+  }
+
+  /* Sidebar: full width, fixed height, independently scrollable */
   .ch-rooms-panel {
     width: 100%;
-    max-height: 240px;
+    /* Fixed sidebar height: enough for search + ~3 rooms + create btn */
+    flex: 0 0 auto;
+    max-height: 260px;
     border-right: none;
     border-bottom: 1px solid #e5e7eb;
+    overflow: hidden;
+  }
+
+  /* Room list inside sidebar: independently scrollable */
+  .ch-rooms-panel .ch-rooms-list {
+    /* Header ~65px + create btn ~55px = ~120px; rest is scrollable list */
+    max-height: 140px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Sidebar header stays compact */
+  .ch-rooms-header {
+    padding: 10px 12px 8px;
+  }
+
+  /* Search bar: full width with proper padding */
+  .ch-search-wrap {
+    border-radius: 8px;
+    padding: 7px 10px;
+  }
+
+  /* Section labels: tighter on mobile */
+  .ch-rooms-section-label {
+    padding: 2px 4px 4px;
+  }
+
+  /* Room items: slightly more compact */
+  .ch-room-item {
+    padding: 7px 8px;
+  }
+
+  /* Create button: full width within sidebar */
+  .ch-create-btn {
+    margin: 8px 10px;
+    width: calc(100% - 20px);
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+
+  /* Chat area: takes remaining height, no overflow */
+  .ch-chat-area {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Messages: fill the space, independently scrollable */
+  .ch-messages {
+    padding: 12px 12px 8px;
+  }
+
+  /* Input bar: comfortable on mobile */
+  .ch-input-wrap {
+    padding: 8px 12px 12px;
+  }
+  .ch-input-inner {
+    padding: 10px 12px;
+  }
+  .ch-input-field {
+    font-size: 14px;
+  }
+
+  /* Chat header: compact */
+  .ch-chat-header {
+    height: 52px;
+    padding: 0 12px;
+  }
+  .ch-chat-title {
+    font-size: 14px;
+  }
+  .ch-close-room-btn {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+
+  /* Empty state: centered in remaining space */
+  .ch-empty {
+    padding: 20px 16px;
+  }
+  .ch-empty-title {
+    font-size: 18px;
+  }
+  .ch-empty-desc {
+    font-size: 13px;
   }
 }
 

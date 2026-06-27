@@ -98,9 +98,26 @@ const ClubFeedPage = () => {
             </button>
           </div>
         ) : posts.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-4xl mb-3">📢</p>
-            <p className="text-gray-500 text-sm">No club announcements yet.</p>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="relative mb-6">
+              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center shadow-inner">
+                <span className="text-5xl select-none animate-bounce">📢</span>
+              </div>
+            </div>
+            <h3 className="text-lg font-bold text-gray-800 mb-2">No announcements yet</h3>
+            <p className="text-sm text-gray-500 max-w-xs mb-6 leading-relaxed">
+              {isCreator
+                ? 'Be the first to post an official announcement, event update, or club news.'
+                : 'No clubs or committees have posted yet. Check back soon for official updates.'}
+            </p>
+            {isCreator && (
+              <button
+                onClick={() => setShowForm(true)}
+                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white text-sm font-semibold rounded-full transition-all shadow-md hover:shadow-lg active:scale-95"
+              >
+                <span className="text-base">+</span> Create First Announcement
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -125,7 +142,7 @@ const ClubFeedPage = () => {
         )}
       </div>
 
-      {showForm && <CreatePostForm onPostCreated={p => setPosts([p, ...posts])} onClose={() => setShowForm(false)} />}
+      {showForm && <CreatePostForm onPostCreated={p => setPosts([p, ...posts])} onClose={() => setShowForm(false)} isClubOrAdmin={isCreator} />}
     </div>
   );
 };

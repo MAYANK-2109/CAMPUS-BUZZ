@@ -30,6 +30,7 @@ const mongoose  = require('mongoose');
 const routes    = require('./routes/index');
 const { initSocket }          = require('./socket/index');
 const { startPostExpiryCron } = require('./cron/postExpiry');
+const rateLimit               = require('express-rate-limit');
 
 const app        = express();
 const httpServer = http.createServer(app);
@@ -88,8 +89,29 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// ── 4. API Routes ──────────────────────────────────────────────────────────
-app.use('/api', routes);
+// ── 4. Rate Limiting ──────────────────────────────────────────────────────
+// Auth routes: tighter limit to block brute-force login / registration spam
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max:      20,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message: { success: false, message: 'Too many requests. Please wait 15 minutes and try again.' },
+});
+
+// General API: generous limit to stop scripted abuse
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max:      200,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message: { success: false, message: 'Rate limit exceeded. Please slow down.' },
+});
+
+// ── 5. API Routes ──────────────────────────────────────────────────────────
+app.use('/api/auth', authLimiter);
+app.use('/api',      apiLimiter);
+app.use('/api',      routes);
 
 // 404 handler for undefined routes
 app.use((req, res) => {
@@ -106,11 +128,11 @@ app.use((err, req, res, _next) => {
   });
 });
 
-// ── 5. Socket.io ───────────────────────────────────────────────────────────
+// ── 6. Socket.io ───────────────────────────────────────────────────────────
 initSocket(httpServer);
 console.log('[Socket.io] Initialized.');
 
-// ── 6 + 7. Connect DB → Start Cron → Listen ─────────────────────────────────
+// ── 7 + 8. Connect DB → Start Cron → Listen ─────────────────────────────────
 const PORT = process.env.PORT || 5000;
 
 connectDB().then(() => {

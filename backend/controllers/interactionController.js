@@ -8,12 +8,13 @@ const Post         = require('../models/Post');
 const Comment      = require('../models/Comment');
 const User         = require('../models/User');
 const Notification = require('../models/Notification');
+const { emitNotifications } = require('../socket');
 
 // ── Helper: fire-and-forget notification creation ─────────────────────────────
 const createNotification = async ({ recipient, sender, type, post, message }) => {
   try {
     if (recipient.toString() === sender.toString()) return; // Don't notify yourself
-    await Notification.create({ recipient, sender, type, post: post || null, message });
+    await emitNotifications([{ recipient, sender, type, post: post || null, message }]);
   } catch (err) {
     console.error('[Notification] failed to create:', err.message);
   }
@@ -22,63 +23,96 @@ const createNotification = async ({ recipient, sender, type, post, message }) =>
 // ── POST /api/posts/:id/like ──────────────────────────────────────────────────
 exports.toggleLike = async (req, res) => {
   try {
-    const post = await Post.findById(req.params.id);
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Not authenticated.' });
+    }
+
+    const post = await Post.findById(req.params.id).select('likes dislikes author');
     if (!post) return res.status(404).json({ success: false, message: 'Post not found.' });
 
-    const userId   = req.user._id.toString();
-    const hasLiked = post.likes.map(id => id.toString()).includes(userId);
+    const hasLiked = post.likes.map(id => id.toString()).includes(userId.toString());
 
-    if (hasLiked) {
-      post.likes.pull(req.user._id);
-    } else {
-      post.likes.addToSet(req.user._id);
-      post.dislikes.pull(req.user._id); // remove dislike if switching
-      // Notify post author
+    // ── Atomic update — only touch the likes/dislikes arrays. ──────────────────
+    // Using findByIdAndUpdate (instead of post.save()) deliberately bypasses full
+    // document validation, so a like never re-validates unrelated legacy fields
+    // such as imageUrl:null or hashtag:'None' on older posts.
+    const update = hasLiked
+      ? { $pull: { likes: userId } }
+      : { $addToSet: { likes: userId }, $pull: { dislikes: userId } };
+
+    const updated = await Post.findByIdAndUpdate(req.params.id, update, {
+      new: true,
+      runValidators: false,
+    }).select('likes dislikes');
+
+    if (!hasLiked) {
+      // Notify post author (fire-and-forget)
       createNotification({
         recipient: post.author,
-        sender:    req.user._id,
+        sender:    userId,
         type:      'like',
         post:      post._id,
         message:   `${req.user.displayName} liked your post.`,
       });
     }
 
-    await post.save();
-    return res.status(200).json({ success: true, likes: post.likes.length, dislikes: post.dislikes.length, liked: !hasLiked, disliked: false });
+    return res.status(200).json({
+      success:  true,
+      likes:    updated.likes.length,
+      dislikes: updated.dislikes.length,
+      liked:    !hasLiked,
+      disliked: false,
+    });
   } catch (err) {
-    console.error('[interactionController.toggleLike]', err);
-    return res.status(500).json({ success: false, message: 'Failed.' });
+    console.error('[interactionController.toggleLike]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to toggle like', error: err.message });
   }
 };
 
 // ── POST /api/posts/:id/dislike ───────────────────────────────────────────────
 exports.toggleDislike = async (req, res) => {
   try {
-    const post = await Post.findById(req.params.id);
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Not authenticated.' });
+    }
+
+    const post = await Post.findById(req.params.id).select('likes dislikes author');
     if (!post) return res.status(404).json({ success: false, message: 'Post not found.' });
 
-    const userId      = req.user._id.toString();
-    const hasDisliked = post.dislikes.map(id => id.toString()).includes(userId);
+    const hasDisliked = post.dislikes.map(id => id.toString()).includes(userId.toString());
 
-    if (hasDisliked) {
-      post.dislikes.pull(req.user._id);
-    } else {
-      post.dislikes.addToSet(req.user._id);
-      post.likes.pull(req.user._id); // remove like if switching
+    // Atomic update — bypasses full-document validation (see toggleLike note).
+    const update = hasDisliked
+      ? { $pull: { dislikes: userId } }
+      : { $addToSet: { dislikes: userId }, $pull: { likes: userId } };
+
+    const updated = await Post.findByIdAndUpdate(req.params.id, update, {
+      new: true,
+      runValidators: false,
+    }).select('likes dislikes');
+
+    if (!hasDisliked) {
       createNotification({
         recipient: post.author,
-        sender:    req.user._id,
+        sender:    userId,
         type:      'dislike',
         post:      post._id,
         message:   `${req.user.displayName} disliked your post.`,
       });
     }
 
-    await post.save();
-    return res.status(200).json({ success: true, likes: post.likes.length, dislikes: post.dislikes.length, liked: false, disliked: !hasDisliked });
+    return res.status(200).json({
+      success:  true,
+      likes:    updated.likes.length,
+      dislikes: updated.dislikes.length,
+      liked:    false,
+      disliked: !hasDisliked,
+    });
   } catch (err) {
-    console.error('[interactionController.toggleDislike]', err);
-    return res.status(500).json({ success: false, message: 'Failed.' });
+    console.error('[interactionController.toggleDislike]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to toggle dislike', error: err.message });
   }
 };
 

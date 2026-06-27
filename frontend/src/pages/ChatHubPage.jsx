@@ -18,7 +18,7 @@ import React, {
 } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
-import { Search, Plus, SendHorizonal, X, Hash, Users, MessageSquare, FileText, ExternalLink, ChevronRight, ChevronDown } from 'lucide-react';
+import { Search, Plus, SendHorizonal, X, Hash, Users, MessageSquare, FileText, ExternalLink, ChevronRight, ChevronDown, ChevronLeft } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -44,6 +44,21 @@ const HASHTAG_COLORS = {
 
 const hashtagColor = (tag) => HASHTAG_COLORS[tag] || '#5865f2';
 const hashtagEmoji = () => '#';
+
+/**
+ * senderIdOf
+ * Normalises a message's senderId to a plain string id, regardless of whether
+ * it arrives as:
+ *   • a string ObjectId        (live socket `globalMessage` payload)
+ *   • a populated user object   (REST history → { _id, displayName, … })
+ *   • the full auth user object (optimistic message → senderId: user)
+ */
+const senderIdOf = (msg) => {
+  const s = msg?.senderId;
+  if (!s) return '';
+  if (typeof s === 'string') return s;
+  return (s._id || s).toString();
+};
 
 const roleBadgeStyle = (role) => {
   if (role === 'Club') return { background: 'rgba(114,137,218,0.2)', color: '#7289da' };
@@ -234,6 +249,8 @@ const ChatHubPage = () => {
   // Chat state
   const [messages, setMessages] = useState([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [msgText, setMsgText] = useState('');
   const [sending, setSending] = useState(false);
   const [closingRoom, setClosingRoom] = useState(false);
@@ -280,7 +297,23 @@ const ChatHubPage = () => {
 
     const onGlobalMessage = (payload) => {
       if (payload.roomId !== activeRoomRef.current?._id) return;
-      setMessages(prev => [...prev, { ...payload, _type: 'msg' }]);
+      setMessages(prev => {
+        // If this echo confirms one of OUR optimistic messages, replace it
+        // in place (same sender + same text) instead of appending a duplicate.
+        const optimisticIdx = prev.findIndex(
+          m => m.isOptimistic &&
+               m.text === payload.text &&
+               senderIdOf(m) === senderIdOf(payload)
+        );
+        if (optimisticIdx !== -1) {
+          const next = [...prev];
+          next[optimisticIdx] = { ...payload, _type: 'msg' };
+          return next;
+        }
+        // Guard against the same persisted message arriving twice.
+        if (payload._id && prev.some(m => m._id === payload._id)) return prev;
+        return [...prev, { ...payload, _type: 'msg' }];
+      });
     };
 
     const onGlobalRoomClosed = ({ roomId, closedBy }) => {
@@ -359,8 +392,9 @@ const ChatHubPage = () => {
 
     // Fetch history via REST (fast fallback before socket confirms)
     try {
-      const { data } = await api.get(`/rooms/${room._id}/messages`);
+      const { data } = await api.get(`/rooms/${room._id}/messages?limit=40`);
       setMessages(data.data.map(m => ({ ...m, _type: 'msg' })));
+      setHasMore(data.hasMore || false);
     } catch (err) {
       console.error('[ChatHub] fetch messages error', err);
     } finally {
@@ -392,12 +426,31 @@ const ChatHubPage = () => {
   // ── Send message ─────────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
     const text = msgText.trim();
-    if (!text || !activeRoom || !socket || roomClosed || sending) return;
+    if (!text || !activeRoom || roomClosed || sending) return;
+    
+    // Optimistic UI Update
+    const tempId = 'temp-' + Date.now();
+    const optimisticMsg = {
+      _id: tempId,
+      text,
+      senderId: user,
+      timestamp: new Date().toISOString(),
+      _type: 'msg',
+      isOptimistic: true
+    };
+    setMessages(prev => [...prev, optimisticMsg]);
+    setMsgText(''); // Clear input immediately
+    
+    if (socket && !connected) {
+      socket.connect(); // Force reconnect attempt
+    }
+
     setSending(true);
-    socket.emit('sendGlobalMsg', { roomId: activeRoom._id, text });
-    setMsgText('');
+    if (socket) {
+      socket.emit('sendGlobalMsg', { roomId: activeRoom._id, text });
+    }
     setSending(false);
-  }, [msgText, activeRoom, socket, roomClosed, sending]);
+  }, [msgText, activeRoom, socket, roomClosed, sending, connected, user]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -429,6 +482,26 @@ const ChatHubPage = () => {
     setTimeout(() => handleSelectRoom(tagged), 100);
   };
 
+  // ── Load older messages (pagination) ─────────────────────────────────────────
+  const handleLoadOlder = useCallback(async () => {
+    if (!activeRoom || loadingOlder || !hasMore || messages.length === 0) return;
+    const oldestId = messages[0]?._id;
+    if (!oldestId) return;
+    setLoadingOlder(true);
+    try {
+      const { data } = await api.get(`/rooms/${activeRoom._id}/messages?before=${oldestId}&limit=40`);
+      setMessages(prev => [
+        ...data.data.map(m => ({ ...m, _type: 'msg' })),
+        ...prev,
+      ]);
+      setHasMore(data.hasMore || false);
+    } catch (err) {
+      console.error('[ChatHub] load older error', err);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [activeRoom, loadingOlder, hasMore, messages]);
+
   // ── Filtered rooms ────────────────────────────────────────────────────────────
   const filteredRooms = rooms.filter(r =>
     r.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -454,7 +527,7 @@ const ChatHubPage = () => {
       isNewDay = true;
     }
 
-    const currentSender = msg.senderId?._id || msg.senderId;
+    const currentSender = senderIdOf(msg);
     const isConsecutive = !isNewDay && lastSender === currentSender;
 
     groupedItems.push({
@@ -580,8 +653,20 @@ const ChatHubPage = () => {
         ) : (
           <>
             {/* Header */}
+            {!connected && (
+              <div style={{ background: '#fef2f2', color: '#ef4444', fontSize: 13, padding: '8px 12px', textAlign: 'center', fontWeight: 500, borderBottom: '1px solid #fee2e2' }}>
+                Reconnecting to chat...
+              </div>
+            )}
             <div className="ch-chat-header">
               <div className="ch-chat-title">
+                <button 
+                  className="md:hidden mr-2 p-1 -ml-2 rounded-full hover:bg-gray-100 text-gray-500" 
+                  onClick={() => setActiveRoom(null)}
+                  aria-label="Back to rooms"
+                >
+                  <ChevronLeft size={20} />
+                </button>
                 <span style={{ fontSize: 20 }}>{hashtagEmoji(activeRoom.hashtag)}</span>
                 {activeRoom.name}
                 <span style={{ fontSize: 12, color: '#72767d', fontWeight: 400 }}>{activeRoom.hashtag}</span>
@@ -638,6 +723,23 @@ const ChatHubPage = () => {
                 </div>
               ) : (
                 <>
+                  {/* Load older messages button */}
+                  {hasMore && (
+                    <div style={{ textAlign: 'center', padding: '12px 0 4px' }}>
+                      <button
+                        onClick={handleLoadOlder}
+                        disabled={loadingOlder}
+                        style={{
+                          background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
+                          borderRadius: 20, color: '#b9bbbe', fontSize: 12, fontWeight: 600,
+                          padding: '6px 16px', cursor: loadingOlder ? 'default' : 'pointer',
+                          transition: 'background 0.15s',
+                        }}
+                      >
+                        {loadingOlder ? 'Loading…' : '⬆ Load older messages'}
+                      </button>
+                    </div>
+                  )}
                   {groupedItems.map((item, idx) => {
                     if (item._type === 'divider') {
                       return <div key={item.key} className="ch-date-divider">{item.label}</div>;
@@ -645,7 +747,8 @@ const ChatHubPage = () => {
 
                     const roleBadge = roleBadgeStyle(item.senderRole || item.senderId?.role);
                     const msgTime = item.timestamp ? format(new Date(item.timestamp), 'h:mm a') : '';
-                    const isOwn = item.senderId === user?._id || item.senderId?.toString() === user?._id;
+                    const myId = user?._id?.toString();
+                    const isOwn = item.isOptimistic || (!!myId && senderIdOf(item) === myId);
                     const showMeta = item._showMeta;
 
                     const handleProfileClick = () => {
@@ -673,8 +776,8 @@ const ChatHubPage = () => {
 
                           <div className="ch-msg-bubble">
                             <div className="ch-msg-text">{item.text}</div>
-                            <div className="ch-msg-time-inline">{msgTime}</div>
                           </div>
+                          <div className="ch-msg-time-below">{msgTime}</div>
                         </div>
                       </div>
                     );
@@ -705,22 +808,17 @@ const ChatHubPage = () => {
                     onChange={(e) => setMsgText(e.target.value)}
                     onKeyDown={handleKeyDown}
                     maxLength={1000}
-                    disabled={sending || !connected}
+                    disabled={sending}
                   />
                   <button
                     className="ch-send-btn"
                     onClick={handleSend}
-                    disabled={!msgText.trim() || sending || !connected}
+                    disabled={!msgText.trim() || sending}
                     aria-label="Send message"
                   >
                     <SendHorizonal size={18} />
                   </button>
                 </div>
-                {!connected && (
-                  <div style={{ fontSize: 11, color: '#ed4245', marginTop: 4, paddingLeft: 4 }}>
-                    ● Reconnecting…
-                  </div>
-                )}
               </div>
             )}
           </>

@@ -53,6 +53,8 @@ const Notification = require('../models/Notification');
 // ════════════════════════════════════════════════════════════════════════════════
 router.post('/auth/register', authController.register);
 router.post('/auth/login',    authController.login);
+router.post('/auth/verify-otp', authController.verifyOtp);
+router.post('/auth/resend-otp', authController.resendOtp);
 router.post('/auth/forgot-password', authController.forgotPassword);
 router.patch('/auth/reset-password/:token', authController.resetPassword);
 router.get( '/auth/me',       protect, authController.getMe);

@@ -103,6 +103,17 @@ const PostSchema = new mongoose.Schema(
       type:    Boolean,
       default: false,
     },
+
+    /**
+     * linkedEvent: optional reference to a calendar event.
+     * Only populated for Club/Admin posts that are associated with
+     * a specific campus event on the calendar.
+     */
+    linkedEvent: {
+      type:    mongoose.Schema.Types.ObjectId,
+      ref:     'Event',
+      default: null,
+    },
   },
   {
     timestamps: true,
