@@ -8,12 +8,13 @@ const Post         = require('../models/Post');
 const Comment      = require('../models/Comment');
 const User         = require('../models/User');
 const Notification = require('../models/Notification');
+const { emitNotifications } = require('../socket');
 
 // ── Helper: fire-and-forget notification creation ─────────────────────────────
 const createNotification = async ({ recipient, sender, type, post, message }) => {
   try {
     if (recipient.toString() === sender.toString()) return; // Don't notify yourself
-    await Notification.create({ recipient, sender, type, post: post || null, message });
+    await emitNotifications([{ recipient, sender, type, post: post || null, message }]);
   } catch (err) {
     console.error('[Notification] failed to create:', err.message);
   }

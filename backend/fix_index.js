@@ -1,1 +1,0 @@
-const mongoose = require('mongoose'); require('dotenv').config(); mongoose.connect(process.env.MONGO_URI).then(async () => { try { const indexes = await mongoose.connection.collection('users').indexes(); console.log(indexes.map(i => i.name)); } catch(e) { console.log(e.message); } process.exit(0); });

@@ -7,7 +7,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Link, useNavigate } from 'react-router-dom';
-import { Heart, ThumbsDown, MessageCircle, Trash2, Bookmark, Share2, MoreHorizontal, Flag } from 'lucide-react';
+import { Heart, ThumbsDown, MessageCircle, Trash2, Bookmark, Share2, MoreHorizontal, Flag, ShoppingBag } from 'lucide-react';
 import HashtagBadge   from './HashtagBadge';
 import CountdownTimer from './CountdownTimer';
 import ContactModal   from './ContactModal';
@@ -38,6 +38,7 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
   const [reporting,    setReporting]    = useState(false);
   const [reportDone,   setReportDone]   = useState(false);
   const [reportToast,  setReportToast]  = useState(false);
+  const [markingSold,  setMarkingSold]  = useState(false);
   const menuRef = useRef(null);
 
   // Close menu on outside click
@@ -115,6 +116,20 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to delete post.');
       setDeleting(false);
+    }
+  };
+
+  // ── Mark as Sold (#resell only) ─────────────────────────────────────────
+  const handleMarkAsSold = async () => {
+    if (!window.confirm('Mark this item as sold? This will close the chat room.')) return;
+    setMarkingSold(true);
+    try {
+      await api.patch(`/chat-rooms/${post._id}/close`);
+      setRoomClosed(true);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to close room.');
+    } finally {
+      setMarkingSold(false);
     }
   };
 
@@ -275,6 +290,18 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
                     >
                       <Trash2 className="w-4 h-4" />
                       {deleting ? 'Deleting…' : 'Delete Post'}
+                    </button>
+                  )}
+                  {/* Mark as Sold — #resell author only, while room is open */}
+                  {isAuthor && post.hashtag === '#resell' && !roomClosed && (
+                    <button
+                      onClick={() => { setShowMenu(false); handleMarkAsSold(); }}
+                      disabled={markingSold}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-green-700 hover:bg-green-50 transition-colors font-medium"
+                      id={`post-sold-${post._id}`}
+                    >
+                      <ShoppingBag className="w-4 h-4" />
+                      {markingSold ? 'Closing…' : '✅ Mark as Sold'}
                     </button>
                   )}
                   {/* Report — only non-authors */}
@@ -457,9 +484,53 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
           )}
 
           {post.description && (
-            <p className="text-sm text-gray-700 mt-0.5 leading-relaxed line-clamp-3">
-              {renderDescription(post.description)}
-            </p>
+            <div className="mt-0.5">
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                {renderDescription(post.description)}
+              </p>
+              
+              {/* ── Google Forms Embed (Club/Admin only) ────────────────────── */}
+              {(post.author?.role === 'Club' || post.author?.role === 'Admin') &&
+                post.description.match(/(https:\/\/(?:docs\.google\.com\/forms\/|forms\.gle\/)[^\s]+)/) && (
+                <div className="mt-3 w-full rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-gray-50">
+                  <iframe
+                    src={post.description.match(/(https:\/\/(?:docs\.google\.com\/forms\/|forms\.gle\/)[^\s]+)/)[1]}
+                    width="100%"
+                    height="450"
+                    frameBorder="0"
+                    marginHeight="0"
+                    marginWidth="0"
+                    title="Embedded Form"
+                    className="w-full bg-white"
+                  >
+                    Loading form…
+                  </iframe>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Linked Event Badge ─────────────────────────────────── */}
+          {post.linkedEvent && (
+            <Link
+              to="/calendar"
+              className="mt-3 flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2.5 hover:bg-indigo-100 transition-colors group"
+            >
+              <span className="text-xl">📅</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-indigo-700 uppercase tracking-wide">Campus Event</p>
+                <p className="text-sm font-semibold text-indigo-900 truncate">
+                  {post.linkedEvent?.title || 'View on Calendar'}
+                </p>
+                {post.linkedEvent?.date && (
+                  <p className="text-xs text-indigo-500 mt-0.5">
+                    {new Date(post.linkedEvent.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {post.linkedEvent.venue ? ` · ${post.linkedEvent.venue}` : ''}
+                  </p>
+                )}
+              </div>
+              <span className="text-indigo-400 group-hover:text-indigo-600 transition-colors text-xs font-medium">View →</span>
+            </Link>
           )}
 
           {/* Custom tags */}

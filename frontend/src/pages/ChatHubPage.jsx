@@ -234,6 +234,8 @@ const ChatHubPage = () => {
   // Chat state
   const [messages, setMessages] = useState([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [msgText, setMsgText] = useState('');
   const [sending, setSending] = useState(false);
   const [closingRoom, setClosingRoom] = useState(false);
@@ -359,8 +361,9 @@ const ChatHubPage = () => {
 
     // Fetch history via REST (fast fallback before socket confirms)
     try {
-      const { data } = await api.get(`/rooms/${room._id}/messages`);
+      const { data } = await api.get(`/rooms/${room._id}/messages?limit=40`);
       setMessages(data.data.map(m => ({ ...m, _type: 'msg' })));
+      setHasMore(data.hasMore || false);
     } catch (err) {
       console.error('[ChatHub] fetch messages error', err);
     } finally {
@@ -447,6 +450,26 @@ const ChatHubPage = () => {
     setShowCreate(false);
     setTimeout(() => handleSelectRoom(tagged), 100);
   };
+
+  // ── Load older messages (pagination) ─────────────────────────────────────────
+  const handleLoadOlder = useCallback(async () => {
+    if (!activeRoom || loadingOlder || !hasMore || messages.length === 0) return;
+    const oldestId = messages[0]?._id;
+    if (!oldestId) return;
+    setLoadingOlder(true);
+    try {
+      const { data } = await api.get(`/rooms/${activeRoom._id}/messages?before=${oldestId}&limit=40`);
+      setMessages(prev => [
+        ...data.data.map(m => ({ ...m, _type: 'msg' })),
+        ...prev,
+      ]);
+      setHasMore(data.hasMore || false);
+    } catch (err) {
+      console.error('[ChatHub] load older error', err);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [activeRoom, loadingOlder, hasMore, messages]);
 
   // ── Filtered rooms ────────────────────────────────────────────────────────────
   const filteredRooms = rooms.filter(r =>
@@ -669,6 +692,23 @@ const ChatHubPage = () => {
                 </div>
               ) : (
                 <>
+                  {/* Load older messages button */}
+                  {hasMore && (
+                    <div style={{ textAlign: 'center', padding: '12px 0 4px' }}>
+                      <button
+                        onClick={handleLoadOlder}
+                        disabled={loadingOlder}
+                        style={{
+                          background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
+                          borderRadius: 20, color: '#b9bbbe', fontSize: 12, fontWeight: 600,
+                          padding: '6px 16px', cursor: loadingOlder ? 'default' : 'pointer',
+                          transition: 'background 0.15s',
+                        }}
+                      >
+                        {loadingOlder ? 'Loading…' : '⬆ Load older messages'}
+                      </button>
+                    </div>
+                  )}
                   {groupedItems.map((item, idx) => {
                     if (item._type === 'divider') {
                       return <div key={item.key} className="ch-date-divider">{item.label}</div>;

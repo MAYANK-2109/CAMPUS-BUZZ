@@ -18,10 +18,21 @@ const HASHTAG_COLORS = {
   '#found':     'bg-emerald-100 text-emerald-800 border-emerald-200',
 };
 
-const CreatePostForm = ({ onPostCreated, onClose }) => {
-  const [form, setForm] = useState({ title: '', description: '', imageUrl: '', hashtag: '', expiresAt: '', customTagsStr: '', totalFare: '' });
+const CreatePostForm = ({ onPostCreated, onClose, isClubOrAdmin = false }) => {
+  const [form, setForm] = useState({ title: '', description: '', imageUrl: '', hashtag: '', expiresAt: '', customTagsStr: '', totalFare: '', linkedEvent: '' });
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+
+  // Fetch upcoming approved events for Club/Admin to link
+  React.useEffect(() => {
+    if (!isClubOrAdmin) return;
+    const today = new Date().toISOString().split('T')[0];
+    const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    api.get(`/events?from=${today}&to=${future}`)
+      .then(({ data }) => setUpcomingEvents(data.data?.filter(e => e.status === 'Approved') || []))
+      .catch(() => {});
+  }, [isClubOrAdmin]);
 
   // @mention autocomplete
   const [mentionQuery, setMentionQuery]     = useState('');
@@ -101,6 +112,7 @@ const CreatePostForm = ({ onPostCreated, onClose }) => {
         ...(form.imageUrl && { imageUrl: form.imageUrl.trim() }),
         ...(TIMED.has(form.hashtag) && { expiresAt: form.expiresAt }),
         ...(form.hashtag === '#cabsplit' && form.totalFare && { totalFare: Number(form.totalFare) }),
+        ...(form.linkedEvent && { linkedEvent: form.linkedEvent }),
       };
       const { data } = await api.post('/posts', payload);
       onPostCreated?.(data.data);
@@ -262,6 +274,25 @@ const CreatePostForm = ({ onPostCreated, onClose }) => {
                   min="0"
                   step="1"
                 />
+              </div>
+            )}
+            {/* Link to Calendar Event (Club/Admin only) */}
+            {isClubOrAdmin && upcomingEvents.length > 0 && (
+              <div className="flex items-center gap-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
+                <span className="text-indigo-500 text-lg flex-shrink-0">📅</span>
+                <select
+                  className="flex-1 text-sm text-gray-700 outline-none bg-transparent"
+                  name="linkedEvent"
+                  value={form.linkedEvent}
+                  onChange={handleChange}
+                >
+                  <option value="">Link to a Campus Event (optional)</option>
+                  {upcomingEvents.map(ev => (
+                    <option key={ev._id} value={ev._id}>
+                      {ev.title} — {new Date(ev.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
           </div>

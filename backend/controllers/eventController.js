@@ -3,13 +3,16 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Campus event management.
  *
- * GET    /api/events            → approved events (all roles); pending for Admin
- * POST   /api/events            → Club/Admin: auto-approved; Student: Pending
- * PATCH  /api/events/:id/status → Admin only: approve or reject requests
- * DELETE /api/events/:id        → Admin only
+ * GET    /api/events              → approved events (all roles); pending for Admin
+ * POST   /api/events              → Club/Admin: auto-approved; Student: Pending
+ * POST   /api/events/request      → Student event request (notifies selected Admins)
+ * PATCH  /api/events/:id/status   → Admin only: approve or reject requests
+ * POST   /api/events/:id/rsvp     → toggle RSVP for current user
+ * DELETE /api/events/:id          → Admin only
  */
 
 const Event = require('../models/Event');
+const { emitNotifications } = require('../socket');
 
 // ── GET /api/events ───────────────────────────────────────────────────────────
 exports.getEvents = async (req, res) => {
@@ -132,7 +135,6 @@ exports.requestEvent = async (req, res) => {
     }
 
     const User = require('../models/User');
-    const Notification = require('../models/Notification');
 
     // Verify selected users are actually admins
     const selectedAdmins = await User.find({ _id: { $in: adminIds }, role: 'Admin' });
@@ -151,11 +153,34 @@ exports.requestEvent = async (req, res) => {
       message:   message,
     }));
 
-    await Notification.insertMany(notifs);
+    await emitNotifications(notifs);
 
     return res.status(200).json({ success: true, message: 'Event request sent successfully.' });
   } catch (err) {
     console.error('[eventController.requestEvent]', err);
     return res.status(500).json({ success: false, message: 'Failed to send event request.' });
+  }
+};
+
+// ── POST /api/events/:id/rsvp — toggle RSVP ──────────────────────────────────
+exports.toggleRsvp = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) return res.status(404).json({ success: false, message: 'Event not found.' });
+
+    const uid    = req.user._id.toString();
+    const joined = event.rsvps.map(id => id.toString()).includes(uid);
+
+    if (joined) {
+      event.rsvps = event.rsvps.filter(id => id.toString() !== uid);
+    } else {
+      event.rsvps.push(req.user._id);
+    }
+    await event.save();
+
+    return res.json({ success: true, rsvpCount: event.rsvps.length, rsvped: !joined });
+  } catch (err) {
+    console.error('[eventController.toggleRsvp]', err);
+    return res.status(500).json({ success: false, message: 'Failed to toggle RSVP.' });
   }
 };

@@ -17,6 +17,8 @@
 const Post         = require('../models/Post');
 const User         = require('../models/User');
 const Notification = require('../models/Notification');
+const ChatRoom     = require('../models/ChatRoom');
+const { emitNotifications } = require('../socket');
 
 // ── Allowed time-sensitive hashtags that need an expiresAt ───────────────────
 const TIMED_HASHTAGS = new Set(['#foodsplit', '#cabsplit']);
@@ -143,10 +145,11 @@ exports.getPosts = async (req, res) => {
     const total = result.total[0]?.count ?? 0;
     const rawPosts = result.data;
 
-    // Populate author + mentions (aggregation doesn't support .populate())
+    // Populate author + mentions + linkedEvent (aggregation doesn't support .populate())
     await Post.populate(rawPosts, [
-      { path: 'author',   select: 'displayName role instituteEmail rollNo avatarUrl' },
-      { path: 'mentions', select: 'displayName _id' },
+      { path: 'author',      select: 'displayName role instituteEmail rollNo avatarUrl' },
+      { path: 'mentions',    select: 'displayName _id' },
+      { path: 'linkedEvent', select: 'title date venue eventType' },
     ]);
 
     return res.status(200).json({
@@ -230,7 +233,23 @@ exports.createPost = async (req, res) => {
       expiresAt:  TIMED_HASHTAGS.has(hashtag) ? new Date(expiresAt) : null,
       mentions:   mentionIds,
       totalFare:  hashtag === '#cabsplit' && totalFare ? Number(totalFare) : null,
+      linkedEvent: req.body.linkedEvent || null,
     });
+
+    // ── Auto-create a ChatRoom for chat-enabled posts ────────────────────────
+    // This ensures the room exists immediately so the first buyer doesn't
+    // trigger a race condition on /rooms/from-post/:id.
+    if (CHAT_HASHTAGS.has(hashtag)) {
+      ChatRoom.create({
+        isGlobal:      false,
+        postId:        post._id,
+        name:          post.title,
+        hashtag:       post.hashtag,
+        createdBy:     post.author,
+        isActive:      true,
+        lastMessageAt: new Date(),
+      }).catch(err => console.error('[postController] ChatRoom auto-create failed:', err.message));
+    }
 
     // ── Fire mention notifications ────────────────────────────────────────────
     if (mentionIds.length > 0) {
@@ -243,7 +262,7 @@ exports.createPost = async (req, res) => {
           post:      post._id,
           message:   `${req.user.displayName} mentioned you in a post.`,
         }));
-      if (notifs.length > 0) await Notification.insertMany(notifs);
+      if (notifs.length > 0) await emitNotifications(notifs);
     }
 
     // Populate author + mentions for the response
@@ -340,3 +359,61 @@ exports.deletePost = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to delete post.' });
   }
 };
+
+// ── GET /api/posts/trending-hashtags ─────────────────────────────────────────
+// Returns the top 5 hashtags by post count. Must be registered BEFORE /:id route.
+exports.getTrendingHashtags = async (req, res) => {
+  try {
+    const trends = await Post.aggregate([
+      { $match: { isActive: true, hashtag: { $exists: true } } },
+      { $group: { _id: '$hashtag', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
+      { $project: { hashtag: '$_id', count: 1, _id: 0 } },
+    ]);
+    return res.json({ success: true, data: trends });
+  } catch (err) {
+    console.error('[postController.getTrendingHashtags]', err);
+    return res.status(500).json({ success: false, data: [] });
+  }
+};
+
+// ── POST /api/posts/:id/report ────────────────────────────────────────────────
+// Any authenticated non-author user can report a post.
+// Fans out a 'report' notification to every Admin account.
+exports.reportPost = async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id).select('_id title author isActive');
+    if (!post || !post.isActive) {
+      return res.status(404).json({ success: false, message: 'Post not found.' });
+    }
+
+    // Authors cannot report their own posts
+    if (post.author.toString() === req.user._id.toString()) {
+      return res.status(400).json({ success: false, message: 'You cannot report your own post.' });
+    }
+
+    // Fetch all Admin user IDs
+    const admins = await User.find({ role: 'Admin' }).select('_id').lean();
+    if (!admins.length) {
+      // No admins to notify — still acknowledge the report gracefully
+      return res.status(200).json({ success: true, message: 'Report submitted.' });
+    }
+
+    // Fan-out a notification to each Admin
+    const notifs = admins.map(admin => ({
+      recipient: admin._id,
+      sender:    req.user._id,
+      type:      'report',
+      post:      post._id,
+      message:   `${req.user.displayName} reported a post: "${post.title}"`,
+    }));
+    await emitNotifications(notifs);
+
+    return res.status(200).json({ success: true, message: 'Report submitted. Our team will review it.' });
+  } catch (err) {
+    console.error('[postController.reportPost]', err);
+    return res.status(500).json({ success: false, message: 'Failed to submit report.' });
+  }
+};
+

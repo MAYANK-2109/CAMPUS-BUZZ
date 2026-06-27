@@ -1,7 +1,14 @@
 /**
  * controllers/userController.js
  * ─────────────────────────────────────────────────────────────────────────────
- * User profile operations.
+ * User profile operations and user-list queries.
+ *
+ * PATCH  /api/users/profile       → update own profile
+ * PATCH  /api/users/change-password
+ * GET    /api/users/:id           → public profile
+ * GET    /api/clubs               → list Club + Admin accounts
+ * GET    /api/users/search        → autocomplete for @mentions
+ * GET    /api/users               → list users (optional ?role= filter)
  */
 
 const User = require('../models/User');
@@ -93,5 +100,50 @@ exports.changePassword = async (req, res) => {
   } catch (err) {
     console.error('[userController.changePassword]', err);
     return res.status(500).json({ success: false, message: 'Failed to change password.' });
+  }
+};
+
+// ── GET /api/clubs — list all Club/Admin accounts for search & follow ─────────
+exports.getClubs = async (req, res) => {
+  try {
+    const clubs = await User.find({ role: { $in: ['Club', 'Admin'] } })
+      .select('displayName avatarUrl role followers following bio')
+      .sort({ displayName: 1 });
+    return res.json({ success: true, data: clubs });
+  } catch (err) {
+    console.error('[userController.getClubs]', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch clubs.' });
+  }
+};
+
+// ── GET /api/users/search — autocomplete for @mentions ───────────────────────
+exports.searchUsers = async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q || q.length < 1) return res.json({ success: true, data: [] });
+    const users = await User.find({
+      displayName: { $regex: q, $options: 'i' },
+    }).select('_id displayName avatarUrl role').limit(8).lean();
+    return res.json({ success: true, data: users });
+  } catch (err) {
+    console.error('[userController.searchUsers]', err);
+    return res.status(500).json({ success: false, data: [] });
+  }
+};
+
+// ── GET /api/users — list users with optional ?role= filter ──────────────────
+exports.listUsers = async (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.role) filter.role = req.query.role;
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    const users = await User.find(filter)
+      .select('_id displayName avatarUrl rollNo role')
+      .limit(limit)
+      .lean();
+    return res.json({ success: true, data: users });
+  } catch (err) {
+    console.error('[userController.listUsers]', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch users.' });
   }
 };

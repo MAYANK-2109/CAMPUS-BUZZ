@@ -28,7 +28,7 @@ const SOCKET_URL =
     ? process.env.REACT_APP_API_URL.replace(/\/api\/?$/, '') 
     : (process.env.NODE_ENV === 'production'
         ? window.location.origin          // same-origin → Render backend
-        : 'http://localhost:5001'));       // local dev
+        : 'http://localhost:5000'));       // local dev
 
 export const SocketProvider = ({ children }) => {
   const { token, user }   = useAuth();

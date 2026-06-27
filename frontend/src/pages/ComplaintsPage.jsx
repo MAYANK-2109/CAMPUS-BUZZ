@@ -317,9 +317,31 @@ const ComplaintsPage = () => {
         ) : error ? (
           <div className="text-center text-red-500 py-8">{error}</div>
         ) : complaints.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-4xl mb-3">📭</p>
-            <p className="text-gray-500">No complaints filed yet.</p>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="relative mb-6">
+              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center shadow-inner animate-pulse">
+                <span className="text-5xl select-none">🛡️</span>
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md border border-gray-100">
+                <span className="text-lg">📝</span>
+              </div>
+            </div>
+            <h3 className="text-lg font-bold text-gray-800 mb-2">
+              {filter ? `No ${filter} complaints` : 'The board is clean'}
+            </h3>
+            <p className="text-sm text-gray-500 max-w-xs mb-6 leading-relaxed">
+              {filter
+                ? `No complaints with status "${filter}" have been filed yet. Try a different filter.`
+                : 'Be the first to raise an issue. All complaints are anonymous — your identity is never stored.'}
+            </p>
+            {!filter && (
+              <button
+                onClick={() => setShowForm(true)}
+                className="px-6 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-full transition-all shadow-md hover:shadow-lg active:scale-95"
+              >
+                📢 File the First Issue
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-4">

@@ -366,7 +366,45 @@ const initSocket = (httpServer) => {
     });
   });
 
+  // Store io instance globally so controllers can emit without circular imports
+  global._io = io;
+
   return io;
 };
 
-module.exports = { initSocket };
+/**
+ * emitNotifications
+ * ─────────────────
+ * Creates notifications in the DB and immediately pushes a real-time
+ * `newNotification` event to each recipient via their personal socket room.
+ *
+ * Usage (in any controller):
+ *   const { emitNotifications } = require('../socket');
+ *   await emitNotifications([{ recipient, sender, type, post, message }]);
+ *
+ * @param {object[]} notifDocs  Array of notification document fields.
+ * @returns {Promise<object[]>} The inserted notification documents.
+ */
+const emitNotifications = async (notifDocs) => {
+  if (!notifDocs || notifDocs.length === 0) return [];
+  const Notification = require('../models/Notification');
+  const inserted = await Notification.insertMany(notifDocs);
+
+  const io = global._io;
+  if (io) {
+    inserted.forEach((n) => {
+      // Each authenticated user joins a personal room keyed by their userId
+      io.to(`user:${n.recipient.toString()}`).emit('newNotification', {
+        _id:       n._id,
+        type:      n.type,
+        message:   n.message,
+        createdAt: n.createdAt,
+        read:      false,
+      });
+    });
+  }
+
+  return inserted;
+};
+
+module.exports = { initSocket, emitNotifications };

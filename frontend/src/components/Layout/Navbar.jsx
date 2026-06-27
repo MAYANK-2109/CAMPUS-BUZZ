@@ -15,6 +15,7 @@ import {
   Bell, LogOut, User, ChevronUp, MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 import api from '../../utils/api';
 
 const NAV_ITEMS = [
@@ -32,6 +33,8 @@ const Navbar = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const menuRef = useRef(null);
 
+  const { socket, connected } = useSocket();
+
   useEffect(() => {
     let cancelled = false;
     const fetchUnread = () => {
@@ -40,9 +43,23 @@ const Navbar = () => {
         .catch(() => {});
     };
     fetchUnread();
-    const interval = setInterval(fetchUnread, 30_000);
+    
+    // Fallback polling just in case, but much slower (every 2 mins)
+    const interval = setInterval(fetchUnread, 120_000);
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
+
+  // Listen for real-time notifications
+  useEffect(() => {
+    if (!socket || !connected) return;
+
+    const handleNewNotif = () => {
+      setUnreadCount(prev => prev + 1);
+    };
+
+    socket.on('newNotification', handleNewNotif);
+    return () => socket.off('newNotification', handleNewNotif);
+  }, [socket, connected]);
 
   // Close menu when clicking outside
   useEffect(() => {
