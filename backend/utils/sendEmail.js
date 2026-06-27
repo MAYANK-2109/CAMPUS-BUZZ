@@ -28,20 +28,29 @@ const sendEmail = async (options) => {
     socketTimeout:     15000,
   });
 
-  // 2) Define the email options
+  // 2) Define the email options.
+  // Gmail requires the From address to be the authenticated account, so default
+  // the sender to SMTP_EMAIL rather than an arbitrary address.
+  const fromEmail = process.env.FROM_EMAIL || process.env.SMTP_EMAIL || 'noreply@campusbuzz.local';
   const message = {
-    from: `${process.env.FROM_NAME || 'CampusBuzz'} <${process.env.FROM_EMAIL || 'noreply@campusbuzz.local'}>`,
+    from: `${process.env.FROM_NAME || 'CampusBuzz'} <${fromEmail}>`,
     to: options.email,
     subject: options.subject,
     text: options.message,
   };
 
   // 3) Actually send the email
+  const smtpConfigured = !!process.env.SMTP_HOST;
   try {
     const info = await transporter.sendMail(message);
     console.log('Message sent: %s', info.messageId);
+    return info;
   } catch (err) {
-    console.error('Email sending failed (this might be expected if no SMTP details are in .env):', err.message);
+    console.error('[sendEmail] failed:', err.message);
+    // When SMTP is configured (production), a failure is a real error — surface
+    // it so callers don't report a false success. Only fall back to a console
+    // mock for local dev where no SMTP credentials are set.
+    if (smtpConfigured) throw err;
     console.log('\n--- MOCKED EMAIL CONTENT ---');
     console.log(`To: ${options.email}`);
     console.log(`Subject: ${options.subject}`);

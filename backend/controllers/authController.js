@@ -253,7 +253,7 @@ exports.resendOtp = async (req, res) => {
     return res.status(200).json({ success: true, message: 'A new verification code has been sent.' });
   } catch (err) {
     console.error('[authController.resendOtp]', err);
-    return res.status(500).json({ success: false, message: 'Failed to resend code.' });
+    return res.status(500).json({ success: false, message: 'Failed to send the code. Please try again.', detail: err.message });
   }
 };
 
@@ -287,13 +287,13 @@ exports.forgotPassword = async (req, res) => {
 
       return res.status(200).json({ success: true, data: 'Email sent' });
     } catch (err) {
-      console.log(err);
+      console.error('[forgotPassword] email error:', err);
       user.resetPasswordToken = undefined;
       user.resetPasswordExpire = undefined;
 
       await user.save({ validateBeforeSave: false });
 
-      return res.status(500).json({ success: false, message: 'Email could not be sent' });
+      return res.status(500).json({ success: false, message: 'Email could not be sent', detail: err.message });
     }
   } catch (err) {
     console.error('[authController.forgotPassword]', err);
