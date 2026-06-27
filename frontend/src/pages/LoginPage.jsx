@@ -22,6 +22,11 @@ const LoginPage = () => {
   const [error,   setError]   = useState('');
   const [message, setMessage] = useState('');
 
+  // Email-OTP verification step
+  const [pendingEmail, setPendingEmail] = useState(null); // when set, show OTP screen
+  const [otp, setOtp]         = useState('');
+  const [resending, setResending] = useState(false);
+
   const handleChange = e => { setForm(p => ({ ...p, [e.target.name]: e.target.value })); setError(''); setMessage(''); };
 
   const handleSubmit = async e => {
@@ -29,22 +34,67 @@ const LoginPage = () => {
     setLoading(true); setError(''); setMessage('');
     try {
       if (forgotPasswordMode) {
-        const { data } = await api.post('/auth/forgot-password', { instituteEmail: form.instituteEmail });
+        await api.post('/auth/forgot-password', { instituteEmail: form.instituteEmail });
         setMessage('Password reset email sent! Check your inbox (or console if mocked).');
-      } else {
-        const endpoint = mode === 'login' ? '/auth/login' : '/auth/register';
-        const payload  = mode === 'login'
-          ? { instituteEmail: form.instituteEmail, password: form.password }
-          : form;
-        const { data } = await api.post(endpoint, payload);
+      } else if (mode === 'login') {
+        const { data } = await api.post('/auth/login', { instituteEmail: form.instituteEmail, password: form.password });
         login(data.user, data.token);
         navigate(from, { replace: true });
+      } else {
+        // register
+        const { data } = await api.post('/auth/register', form);
+        if (data.requiresVerification) {
+          setPendingEmail(data.instituteEmail || form.instituteEmail);
+          setOtp('');
+          setMessage(data.message || 'Verification code sent to your email.');
+        } else {
+          login(data.user, data.token);
+          navigate(from, { replace: true });
+        }
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Something went wrong.');
+      const data = err.response?.data;
+      // Login of an unverified account → switch to OTP screen (code already re-sent)
+      if (data?.requiresVerification) {
+        setPendingEmail(data.instituteEmail || form.instituteEmail);
+        setOtp('');
+        setMessage(data.message || 'Please verify your email to continue.');
+      } else {
+        setError(data?.message || 'Something went wrong.');
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVerify = async e => {
+    e.preventDefault();
+    setLoading(true); setError(''); setMessage('');
+    try {
+      const { data } = await api.post('/auth/verify-otp', { instituteEmail: pendingEmail, otp: otp.trim() });
+      login(data.user, data.token);
+      navigate(from, { replace: true });
+    } catch (err) {
+      setError(err.response?.data?.message || 'Verification failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setResending(true); setError(''); setMessage('');
+    try {
+      const { data } = await api.post('/auth/resend-otp', { instituteEmail: pendingEmail });
+      setMessage(data.message || 'A new code has been sent.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not resend the code.');
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const exitVerify = () => {
+    setPendingEmail(null); setOtp(''); setError(''); setMessage(''); setMode('login');
   };
 
   return (
@@ -65,6 +115,51 @@ const LoginPage = () => {
             <p className="text-sm text-gray-500 mt-1 font-medium">NITRR · Campus Coordination Hub</p>
           </div>
 
+          {/* ── OTP verification step ───────────────────────────────────── */}
+          {pendingEmail ? (
+            <>
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-gray-900 text-center mb-2">Verify your email</h2>
+                <p className="text-sm text-gray-500 text-center">
+                  We sent a 6-digit code to <span className="font-semibold text-gray-700">{pendingEmail}</span>.
+                </p>
+              </div>
+
+              <form onSubmit={handleVerify} className="space-y-3">
+                {error && (
+                  <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5 text-center animate-fade-in-up">{error}</p>
+                )}
+                {message && (
+                  <p className="text-sm text-green-600 bg-green-50 border border-green-100 rounded-xl px-3 py-2.5 text-center animate-fade-in-up">{message}</p>
+                )}
+
+                <input
+                  className="input-base text-center tracking-[0.5em] text-lg font-semibold"
+                  name="otp"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={otp}
+                  onChange={e => { setOtp(e.target.value.replace(/\D/g, '')); setError(''); setMessage(''); }}
+                  placeholder="••••••"
+                  autoFocus
+                  required
+                />
+
+                <button type="submit" disabled={loading || otp.length !== 6} className="btn-primary w-full mt-2 justify-center text-center">
+                  {loading ? 'Verifying…' : 'Verify & Continue'}
+                </button>
+
+                <button type="button" onClick={handleResend} disabled={resending} className="w-full mt-1 text-sm text-blue-500 hover:text-blue-600 font-medium transition-colors disabled:opacity-50">
+                  {resending ? 'Sending…' : 'Resend code'}
+                </button>
+                <button type="button" onClick={exitVerify} className="w-full text-sm text-gray-500 hover:text-gray-700 font-medium transition-colors">
+                  Back to Login
+                </button>
+              </form>
+            </>
+          ) : (
+          <>
           {/* Tab toggle */}
           {!forgotPasswordMode && (
             <div className="flex rounded-xl overflow-hidden border border-gray-200 mb-6 bg-gray-50">
@@ -146,9 +241,12 @@ const LoginPage = () => {
               </button>
             )}
           </form>
+          </>
+          )}
         </div>
 
         {/* Toggle card */}
+        {!pendingEmail && !forgotPasswordMode && (
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm py-5 text-center text-sm">
           {mode === 'login' ? (
             <p className="text-gray-700">Don't have an account?{' '}
@@ -160,6 +258,7 @@ const LoginPage = () => {
             </p>
           )}
         </div>
+        )}
 
         <p className="text-center text-xs text-gray-400 mt-6">National Institute of Technology Raipur</p>
       </div>

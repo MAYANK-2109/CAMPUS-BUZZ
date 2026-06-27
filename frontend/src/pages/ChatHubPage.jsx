@@ -45,6 +45,21 @@ const HASHTAG_COLORS = {
 const hashtagColor = (tag) => HASHTAG_COLORS[tag] || '#5865f2';
 const hashtagEmoji = () => '#';
 
+/**
+ * senderIdOf
+ * Normalises a message's senderId to a plain string id, regardless of whether
+ * it arrives as:
+ *   • a string ObjectId        (live socket `globalMessage` payload)
+ *   • a populated user object   (REST history → { _id, displayName, … })
+ *   • the full auth user object (optimistic message → senderId: user)
+ */
+const senderIdOf = (msg) => {
+  const s = msg?.senderId;
+  if (!s) return '';
+  if (typeof s === 'string') return s;
+  return (s._id || s).toString();
+};
+
 const roleBadgeStyle = (role) => {
   if (role === 'Club') return { background: 'rgba(114,137,218,0.2)', color: '#7289da' };
   if (role === 'Admin') return { background: 'rgba(237,66,69,0.2)', color: '#ed4245' };
@@ -282,7 +297,23 @@ const ChatHubPage = () => {
 
     const onGlobalMessage = (payload) => {
       if (payload.roomId !== activeRoomRef.current?._id) return;
-      setMessages(prev => [...prev, { ...payload, _type: 'msg' }]);
+      setMessages(prev => {
+        // If this echo confirms one of OUR optimistic messages, replace it
+        // in place (same sender + same text) instead of appending a duplicate.
+        const optimisticIdx = prev.findIndex(
+          m => m.isOptimistic &&
+               m.text === payload.text &&
+               senderIdOf(m) === senderIdOf(payload)
+        );
+        if (optimisticIdx !== -1) {
+          const next = [...prev];
+          next[optimisticIdx] = { ...payload, _type: 'msg' };
+          return next;
+        }
+        // Guard against the same persisted message arriving twice.
+        if (payload._id && prev.some(m => m._id === payload._id)) return prev;
+        return [...prev, { ...payload, _type: 'msg' }];
+      });
     };
 
     const onGlobalRoomClosed = ({ roomId, closedBy }) => {
@@ -496,7 +527,7 @@ const ChatHubPage = () => {
       isNewDay = true;
     }
 
-    const currentSender = msg.senderId?._id || msg.senderId;
+    const currentSender = senderIdOf(msg);
     const isConsecutive = !isNewDay && lastSender === currentSender;
 
     groupedItems.push({
@@ -716,7 +747,8 @@ const ChatHubPage = () => {
 
                     const roleBadge = roleBadgeStyle(item.senderRole || item.senderId?.role);
                     const msgTime = item.timestamp ? format(new Date(item.timestamp), 'h:mm a') : '';
-                    const isOwn = item.senderId === user?._id || item.senderId?.toString() === user?._id;
+                    const myId = user?._id?.toString();
+                    const isOwn = item.isOptimistic || (!!myId && senderIdOf(item) === myId);
                     const showMeta = item._showMeta;
 
                     const handleProfileClick = () => {

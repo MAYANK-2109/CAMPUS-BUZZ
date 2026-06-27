@@ -15,7 +15,6 @@ import {
   Bell, LogOut, User, ChevronUp, MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useSocket } from '../../context/SocketContext';
 import api from '../../utils/api';
 
 const NAV_ITEMS = [
@@ -33,33 +32,41 @@ const Navbar = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const menuRef = useRef(null);
 
-  const { socket, connected } = useSocket();
-
   useEffect(() => {
     let cancelled = false;
+    let timer     = null;
+
+    // Polling with exponential backoff on failure: a healthy server is polled
+    // every 30s, but if the request fails (server down → ERR_CONNECTION_CLOSED)
+    // we progressively back off (60s, 120s, … up to 5min) instead of hammering
+    // a server that's already struggling. A success resets the interval to 30s.
+    const BASE_DELAY = 30_000;
+    const MAX_DELAY  = 300_000;
+    let   delay      = BASE_DELAY;
+
+    const schedule = (ms) => {
+      if (cancelled) return;
+      timer = setTimeout(fetchUnread, ms);
+    };
+
     const fetchUnread = () => {
       api.get('/notifications/unread-count')
-        .then(({ data }) => { if (!cancelled) setUnreadCount(data.count || 0); })
-        .catch(() => {});
+        .then(({ data }) => {
+          if (cancelled) return;
+          setUnreadCount(data.count || 0);
+          delay = BASE_DELAY;            // healthy → reset to normal cadence
+          schedule(delay);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          delay = Math.min(delay * 2, MAX_DELAY); // failure → back off
+          schedule(delay);
+        });
     };
+
     fetchUnread();
-    
-    // Fallback polling just in case, but much slower (every 2 mins)
-    const interval = setInterval(fetchUnread, 120_000);
-    return () => { cancelled = true; clearInterval(interval); };
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, []);
-
-  // Listen for real-time notifications
-  useEffect(() => {
-    if (!socket || !connected) return;
-
-    const handleNewNotif = () => {
-      setUnreadCount(prev => prev + 1);
-    };
-
-    socket.on('newNotification', handleNewNotif);
-    return () => socket.off('newNotification', handleNewNotif);
-  }, [socket, connected]);
 
   // Close menu when clicking outside
   useEffect(() => {
