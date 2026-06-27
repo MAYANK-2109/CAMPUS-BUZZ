@@ -1,6 +1,6 @@
 # 🗺️ Campus Buzz — Data Flow & Architecture
 
-> A deep-dive into how data moves through the Campus Buzz system: from browser to database and back, through REST and WebSocket channels.
+> How data moves through the Campus Buzz system: from browser to database and back, over REST and WebSocket channels.
 
 ---
 
@@ -8,7 +8,7 @@
 
 - [System Overview](#-system-overview)
 - [High-Level Architecture](#-high-level-architecture)
-- [Authentication Flow](#-1-authentication-flow)
+- [Authentication & OTP Flow](#-1-authentication--otp-flow)
 - [Post Feed Flow](#-2-post-feed-flow)
 - [Real-time Chat Flow](#-3-real-time-chat-flow)
 - [Cab Tracker GPS Flow](#-4-cab-tracker-gps-flow)
@@ -25,32 +25,32 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                          INTERNET / CDN                             │
-└────────────────────────┬────────────────────────────────────────────┘
-                         │
-           ┌─────────────▼──────────────┐
-           │       VERCEL (Frontend)     │
-           │   React SPA (CRA + Nginx)   │
-           │   Port: 443 (HTTPS)         │
-           └─────────────┬──────────────┘
-                         │
+│                           INTERNET                                  │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │
+             ┌─────────────▼──────────────┐
+             │       VERCEL (Frontend)     │
+             │   React SPA (CRA)           │
+             │   Port: 443 (HTTPS)         │
+             └─────────────┬──────────────┘
+                           │
                REST /api/*  +  WebSocket (Socket.io)
-                         │
-           ┌─────────────▼──────────────┐
-           │      RENDER (Backend)       │
-           │   Node.js 18 + Express 4    │
-           │   Socket.io 4 on HTTP       │
-           │   Port: 5000                │
-           │  ┌──────────────────────┐   │
-           │  │  node-cron (*/5 min) │   │
-           │  └──────────────────────┘   │
-           └─────────────┬──────────────┘
-                         │  mongoose 8
-           ┌─────────────▼──────────────┐
-           │      MONGODB ATLAS          │
-           │   Database: campusbuzz      │
-           │   Collections: 8            │
-           └────────────────────────────┘
+                           │
+             ┌─────────────▼──────────────┐
+             │      RENDER (Backend)       │
+             │   Node.js + Express 4       │
+             │   Socket.io 4 on HTTP       │
+             │   Port: 5000                │
+             │  ┌──────────────────────┐   │
+             │  │  node-cron (*/5 min) │   │
+             │  └──────────────────────┘   │
+             └─────────────┬──────────────┘
+                           │  mongoose
+             ┌─────────────▼──────────────┐
+             │      MONGODB ATLAS          │
+             │   Database: campusbuzz      │
+             │   Collections: 8            │
+             └────────────────────────────┘
 ```
 
 ---
@@ -58,81 +58,120 @@
 ## 🏛️ High-Level Architecture
 
 ```
-FRONTEND (React)                       BACKEND (Express + Socket.io)
-─────────────────────                  ──────────────────────────────────────
+FRONTEND (React)                          BACKEND (Express + Socket.io)
+───────────────────────                   ──────────────────────────────────────
 
-┌──────────────────┐  HTTP REST        ┌──────────────────────────────────┐
-│   AuthContext    │ ◄──────────────── │  routes/index.js                 │
-│  (JWT token)     │                   │  /api/auth, /api/posts,          │
-└────────┬─────────┘                   │  /api/events, /api/complaints,   │
-         │                             │  /api/notifications, /api/users  │
-         │ token                       └──────────┬───────────────────────┘
-         ▼                                        │
-┌──────────────────┐                   ┌──────────▼───────────────────────┐
-│  SocketContext   │ ◄── WebSocket ─── │  socket/index.js                 │
-│  (1 connection)  │                   │  JWT middleware → event handlers  │
-└────────┬─────────┘                   └──────────┬───────────────────────┘
-         │                                        │
-         │ socket / axios                ┌─────────▼────────────────────────┐
-         ▼                               │  MongoDB (via Mongoose)           │
-┌──────────────────┐                    │  Users, Posts, ChatRooms,         │
-│   Pages /        │                    │  Messages, Events, Complaints,    │
-│   Components     │                    │  Announcements, Notifications     │
-└──────────────────┘                    └──────────────────────────────────┘
+┌──────────────────┐   HTTP REST          ┌──────────────────────────────────┐
+│   AuthContext    │ ◄──────────────────► │  routes/index.js                 │
+│  (token, user)   │                      │  /api/auth, /api/posts,          │
+└────────┬─────────┘                      │  /api/events, /api/complaints,   │
+         │                                │  /api/announcements,             │
+         │ token                          │  /api/notifications, /api/users, │
+         ▼                                │  /api/clubs, /api/rooms,         │
+┌──────────────────┐                      │  /api/chat-rooms                 │
+│  SocketContext   │ ◄── WebSocket ─────► │  socket/index.js                 │
+│  (1 connection)  │                      │  JWT middleware → event handlers  │
+└────────┬─────────┘                      └──────────┬───────────────────────┘
+         │                                           │
+         │ socket / axios                  ┌──────────▼───────────────────────┐
+         ▼                                 │  MongoDB (Mongoose)               │
+┌──────────────────┐                       │  Users, Posts, ChatRooms,        │
+│  Pages &         │                       │  Messages, Events, Complaints,   │
+│  Components      │                       │  Announcements, Notifications    │
+└──────────────────┘                       └──────────────────────────────────┘
 ```
 
 ---
 
-## 🔐 1. Authentication Flow
+## 🔐 1. Authentication & OTP Flow
 
 ```
-Browser                       Express Server                    MongoDB
-────────                      ──────────────                    ───────
+Browser                          Express Server                    MongoDB / SMTP
+───────                          ──────────────                    ──────────────
 
 POST /api/auth/register
-  { instituteEmail, password,
-    displayName, role }
-        │
-        ▼
-  [express-validator]
-  validates email regex:
-  [a-z]{2,}\d{3}\.[a-z]+\d{4}@*.nitrr.ac.in
-        │
-        ▼
-  bcrypt.hash(password, 12) ──────────────────────► User.create({ ... })
-                                                            │
-        ◄───────────── { token, user } ────────────── JWT.sign(id, secret, 7d)
+  { rollNo, instituteEmail,
+    password, role, displayName }
+          │
+          ▼
+  Validate email regex:
+  [a-z]{2+}\d{3}\.[a-z]+\d{4}@*.nitrr.ac.in
+          │
+  Check for existing email/rollNo
+          │
+  User.create({ isVerified: false })
+          │
+  user.generateOtp() → bcrypt hash stored as otpHash
+          │
+  sendEmail(OTP code) ─────────────────────────────────► SMTP → user inbox
+          │
+  ◄── { requiresVerification: true, instituteEmail }
+          │
+          ▼
+  User enters 6-digit OTP code
 
-─────────────────────────────────────────────────────────────────────────
-
-POST /api/auth/login
-  { instituteEmail, password }
-        │
-        ▼
-  User.findByEmailWithPassword(email)  ◄───── MongoDB (select +passwordHash)
-        │
-        ▼
-  bcrypt.compare(plain, hash)
-        │  ✓ match
-        ▼
+POST /api/auth/verify-otp
+  { instituteEmail, otp }
+          │
+  user.verifyOtp(otp) → compare against otpHash
+  Check otpExpire (10 min) & otpAttempts (max 5)
+          │
+  user.isVerified = true, clear otp fields
+          │
   JWT.sign({ id, role }, secret, 7d)
-        │
-        ◄───── { token, user: { _id, displayName, role, ... } }
-        │
-        ▼
+          │
+  ◄── { token, user }
+          │
+          ▼
   localStorage.setItem('cb_token', token)
   AuthContext: { token, user } → available app-wide
 
 ─────────────────────────────────────────────────────────────────────────
 
-Every subsequent request:
+POST /api/auth/login
+  { instituteEmail, password }
+          │
+  User.findByEmailWithPassword() ← MongoDB (select +passwordHash)
+          │
+  bcrypt.compare(plain, hash)
+          │ ✓ match
+  Check isVerified:
+    false + otpHash → resend OTP, return 403 requiresVerification
+    false + no OTP  → auto-verify (legacy accounts)
+    true            → issue JWT
+          │
+  ◄── { token, user }
 
-  Axios request ──► Authorization: Bearer <token>
-                            │
-                    [auth.js middleware]
-                    JWT.verify(token, secret)
-                    User.findById(decoded.id)
-                    req.user = user  ──► controller
+─────────────────────────────────────────────────────────────────────────
+
+POST /api/auth/forgot-password
+  { instituteEmail }
+          │
+  user.getResetPasswordToken()
+    → crypto.randomBytes(20) token
+    → sha256 hash stored as resetPasswordToken
+    → resetPasswordExpire = now + 10 min
+          │
+  sendEmail(resetUrl: CLIENT_URL/reset-password/:token)
+
+PATCH /api/auth/reset-password/:token
+  { password }
+          │
+  sha256(token) → find user with matching hash & unexpired
+          │
+  user.passwordHash = newPassword (pre-save hook re-hashes)
+  Clear token fields → issue new JWT
+
+─────────────────────────────────────────────────────────────────────────
+
+Every subsequent protected request:
+
+  Axios ──► Authorization: Bearer <token>
+                      │
+              [auth.js middleware]
+              JWT.verify(token, secret)
+              User.findById(decoded.id)
+              req.user = user ──► controller
 ```
 
 ---
@@ -140,71 +179,92 @@ Every subsequent request:
 ## 📰 2. Post Feed Flow
 
 ```
-USER ACTION: Loads Feed Page
-        │
-        ▼
-GET /api/posts?page=1&limit=10
-        │
-        ▼
+USER: Load Feed Page
+          │
+GET /api/posts?page=1&limit=10&hashtag=#cabsplit&feed=club
+          │
   postController.getPosts()
   ┌────────────────────────────────────────────────────────────────┐
-  │  Query: Post.find({ isActive: true })                          │
+  │  Query: Post.find({ isActive: true, ...filters })              │
   │    .populate('author', 'displayName avatarUrl role')          │
   │    .populate('mentions', 'displayName')                       │
   │    .sort({ createdAt: -1 })                                   │
   │    .skip((page-1) * limit).limit(limit)                       │
-  │                                                                │
-  │  Index used: { isActive: 1, createdAt: -1 }                   │
+  │  Index: { isActive: 1, createdAt: -1 }                        │
   └────────────────────────────────────────────────────────────────┘
-        │
-        ◄──── [{ post1 }, { post2 }, ...]
-        │
-        ▼
-  PostFeed.jsx renders PostCard.jsx for each post
-        │
-        ▼
+          │
+  ◄── [{ post1 }, { post2 }, ...]
+          │
+  PostFeed.jsx → PostCard.jsx per post
+          │
   Per-post conditional UI:
-  ┌─────────────────────────────────────────────────────┐
-  │  #foodsplit / #cabsplit  → CountdownTimer + Chat     │
-  │  #resell                 → Chat button (no timer)    │
-  │  #lost / #found          → ContactModal (no chat)    │
-  │  (other)                 → Plain post card           │
-  └─────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────┐
+  │  #foodsplit / #cabsplit → CountdownTimer + Chat      │
+  │  #resell                → Chat button (no timer)     │
+  │  #lost / #found         → ContactModal (no chat)     │
+  └──────────────────────────────────────────────────────┘
 
-USER ACTION: Like a post
-        │
-        ▼
-POST /api/posts/:id/like
-        │
-  postController.likePost():
-  ┌──────────────────────────────────────────────────────────┐
-  │  If user in likes[] → pull (toggle off)                  │
-  │  Else → push to likes[], pull from dislikes[] if needed  │
-  │  If new like → create Notification{ type:'like', ... }   │
-  └──────────────────────────────────────────────────────────┘
-        │
-        ◄──── { likes: [...], dislikes: [...] }
-        │
-        ▼
-  PostCard re-renders with updated counts
+─────────────────────────────────────────────────────────────────────
 
-USER ACTION: Create Post
-        │
-        ▼
+USER: Get Trending Hashtags (RightPanel)
+          │
+GET /api/posts/trending-hashtags
+          │
+  Post.aggregate([
+    $match: { isActive: true, hashtag: { $exists: true } },
+    $group: { _id: '$hashtag', count: { $sum: 1 } },
+    $sort:  { count: -1 },
+    $limit: 5
+  ])
+          │
+  ◄── [{ hashtag: '#cabsplit', count: 12 }, ...]
+
+─────────────────────────────────────────────────────────────────────
+
+USER: Create Post
+          │
 POST /api/posts
-  { title, description, imageUrl(base64), hashtag, expiresAt? }
-        │
+  { title, description, imageUrl(base64), hashtag, expiresAt?, totalFare? }
+          │
   postController.createPost():
   ┌──────────────────────────────────────────────────────────┐
   │  Validate required fields                                │
   │  If #foodsplit/#cabsplit → require expiresAt             │
-  │  Extract @mentions from description                      │
+  │  Extract @mentions from description text                 │
   │  Post.create({ ... })                                    │
-  │  Create Notification{ type:'new_post' } for followers   │
-  │  Create Notification{ type:'mention' } for mentioned    │
+  │  For each follower → Notification{ type: 'new_post' }   │
+  │  For each mention  → Notification{ type: 'mention' }    │
   └──────────────────────────────────────────────────────────┘
-        │
-        ◄──── { post: { ... } }
+          │
+  ◄── { success: true, post: { ... } }
+
+─────────────────────────────────────────────────────────────────────
+
+USER: Like a Post (toggle)
+          │
+POST /api/posts/:id/like
+          │
+  interactionController.toggleLike():
+  ┌──────────────────────────────────────────────────────────┐
+  │  If userId in likes[]  → $pull from likes (toggle off)  │
+  │  Else                  → $push to likes,                 │
+  │                          $pull from dislikes if needed   │
+  │  If new like → Notification{ type: 'like' } to author   │
+  └──────────────────────────────────────────────────────────┘
+          │
+  ◄── { likes: [...], dislikes: [...] }
+
+─────────────────────────────────────────────────────────────────────
+
+USER: Report a Post
+          │
+POST /api/posts/:id/report
+          │
+  Verify not author of post
+  Fetch all Admin user IDs
+  Notification.insertMany({ type:'report', ... }) for each Admin
+          │
+  ◄── { success: true, message: 'Report submitted.' }
 ```
 
 ---
@@ -215,73 +275,80 @@ POST /api/posts
 
 ```
 USER clicks "Chat" on a #foodsplit post
-        │
-        ▼
-  Frontend: socket.emit('joinRoom', { postId })
-        │                                              Socket.io Server
-        │ ─────────────────────────────────────────► socket.on('joinRoom')
-        │                                                      │
-        │                                          Post.findById(postId)
-        │                                            → verify isActive
-        │                                            → verify hashtag ∈ {#foodsplit,#cabsplit,#resell}
-        │                                          ChatRoom.findOrCreate(postId)
-        │                                          Message.find({ roomId }).limit(50)
-        │                                                      │
-        ◄─────────────────────────────────────────  socket.emit('joinedRoom', { roomId, history })
-        │
-        ▼
+          │
+  socket.emit('joinRoom', { postId })
+          │ ─────────────────────────────────────────► socket.on('joinRoom')
+          │                                          Post.findById → verify isActive
+          │                                          Verify hashtag ∈ {#foodsplit,#cabsplit,#resell}
+          │                                          ChatRoom.findOrCreate(postId)
+          │                                          ChatRoom.updateOne → $addToSet participants
+          │                                          Message.find().sort().limit(50).populate()
+          │                                                        │
+          ◄─────────────────────────────────────────  socket.emit('joinedRoom', { roomId, history })
+          │
   Chat UI renders history
 
 USER sends message
-        │
-        ▼
+          │
   socket.emit('sendMessage', { postId, text })
-        │ ─────────────────────────────────────────► socket.on('sendMessage')
-        │                                          ChatRoom.findOne({ postId })
-        │                                            → verify room.isActive
-        │                                          Post.findById → verify isActive
-        │                                          Message.create({ roomId, senderId, text })
-        │                                                      │
-        │                                         io.to(postId).emit('newMessage', payload)
-        │                                                      │
-        ◄──────────────────────────────────────── all sockets in room receive 'newMessage'
-        │
-        ▼
-  Chat UI appends new message bubble
+          │ ─────────────────────────────────────────► socket.on('sendMessage')
+          │                                          ChatRoom.findOne({ postId }) → verify isActive
+          │                                          Post.findById → verify isActive
+          │                                          Message.create({ roomId, senderId, text })
+          │                                         io.to(postId).emit('newMessage', payload)
+          ◄──────────────────────────────────────── all sockets in room receive 'newMessage'
+
+USER (post author) closes room
+          │
+  socket.emit('closeRoom', { postId })
+          │ ─────────────────────────────────────────► Verify socket.user is post author
+          │                                          ChatRoom.findOne → room.isActive = false
+          │                                         io.to(postId).emit('roomClosed', { closedBy })
 ```
 
 ### 3b. Global Hub Room
 
 ```
-USER opens Chat Hub  →  GET /api/rooms (lists all active global rooms)
-        │
-        ▼
+USER opens Chat Hub
+          │
+GET /api/rooms
+          │
+  Returns globalRooms (isGlobal:true) + postRooms (isGlobal:false, postId not null)
+  Each normalised with _roomType: 'global' | 'post'
+          │
   ChatHubPage shows room list with hashtag badges
 
-USER selects room "#general"
-        │
-        ▼
+USER selects a room
+          │
   socket.emit('joinGlobalRoom', { roomId })
-        │ ─────────────────────────────────────────► socket.on('joinGlobalRoom')
-        │                                          ChatRoom.findById(roomId)
-        │                                            .populate('createdBy')
-        │                                          ChatRoom.updateOne → $addToSet participants
-        │                                          Message.find({ roomId }).limit(60)
-        │                                          io.in(roomId).fetchSockets() → onlineCount
-        │                                                      │
-        ◄─── socket.emit('globalJoined', { room, history, onlineCount })
-        │
-        │   io.to(roomId).emit('onlineUsersUpdate', { users[] })
-        ◄── (all room members receive updated user list)
+          │ ─────────────────────────────────────────► socket.on('joinGlobalRoom')
+          │                                          ChatRoom.findById → populate createdBy
+          │                                          Verify isGlobal & isActive
+          │                                          $addToSet participants
+          │                                          Leave previous global room if different
+          │                                          Message.find().limit(60)
+          │                                          io.in(roomId).fetchSockets() → onlineCount
+          │                                                        │
+          ◄─── socket.emit('globalJoined', { room, history, onlineCount })
+          │
+  socket.to(roomId).emit('globalUserJoined', { userId, displayName })
+  io.to(roomId).emit('onlineUsersUpdate', { roomId, users[] })
 
 USER sends message
-        │
-        ▼
+          │
   socket.emit('sendGlobalMsg', { roomId, text })
-        │ ─────────────────────────────────────────► Message.create(...)
-        │                                          ChatRoom.updateOne → lastMessageAt
-        │                                         io.to(roomId).emit('globalMessage', payload)
-        ◄────────────────────────────────────────── all room members receive message
+          │ ─────────────────────────────────────────► Message.create(...)
+          │                                          ChatRoom.updateOne → lastMessageAt
+          │                                         io.to(roomId).emit('globalMessage', payload)
+
+USER creates a new room
+          │
+POST /api/rooms
+  { name: 'Weekend Trek Planning', hashtag: '#misc' }
+          │
+  ChatRoom.create({ isGlobal: true, name, hashtag, createdBy, lastMessageAt: now })
+          │
+  ◄── { success: true, data: room }
 ```
 
 ---
@@ -289,29 +356,29 @@ USER sends message
 ## 🚕 4. Cab Tracker GPS Flow
 
 ```
-DRIVER (post author) shares location
-        │
-        ▼
-  CabTracker.jsx: navigator.geolocation.watchPosition(...)
-        │
-  Every position update:
-        │
-        ▼
+DRIVER (post author) enables location sharing
+          │
+  CabTracker.jsx:
+  navigator.geolocation.watchPosition(callback)
+          │
+  On each position update:
+          │
   socket.emit('cabLocation', { postId, lat, lng })
-        │ ─────────────────────────────────────────► socket.on('cabLocation')
-        │                                            NO DATABASE WRITE
-        │                                            socket.to(postId).emit('cabLocationUpdate', {
-        │                                              postId, lat, lng, sharedBy, ts: Date.now()
-        │                                            })
-        │
-        ◄── All OTHER sockets in the post room receive the update
-        │
-        ▼
-  CabTracker.jsx: leaflet map marker moves in real-time
+          │ ─────────────────────────────────────────► socket.on('cabLocation')
+          │                                            NO DATABASE WRITE
+          │                                            socket.to(postId).emit('cabLocationUpdate', {
+          │                                              postId, lat, lng,
+          │                                              sharedBy: socket.user.displayName,
+          │                                              ts: Date.now()
+          │                                            })
+          │
+  ◄── All OTHER sockets in the same post room receive cabLocationUpdate
+          │
+  CabTracker.jsx: Leaflet marker moves in real time
 
  ╔══════════════════════════════════════════════════════╗
- ║  NOTE: GPS coordinates are NEVER persisted to DB.   ║
- ║  Pure WebSocket relay. Privacy by design.           ║
+ ║  GPS coordinates are NEVER written to the database. ║
+ ║  Pure WebSocket relay — privacy by design.          ║
  ╚══════════════════════════════════════════════════════╝
 ```
 
@@ -320,60 +387,54 @@ DRIVER (post author) shares location
 ## 🔔 5. Notification Flow
 
 ```
-TRIGGER EVENT (e.g., someone likes your post)
-        │
-        ▼
-  postController.likePost():
+TRIGGER EVENT: Someone likes your post
+          │
+  interactionController.toggleLike():
   ┌──────────────────────────────────────────────────────────┐
   │  Notification.create({                                   │
-  │    recipient: post.author,   ← who receives it           │
-  │    sender: req.user._id,     ← who caused it            │
-  │    type: 'like',                                         │
-  │    post: postId,                                         │
-  │    message: `${displayName} liked your post`             │
+  │    recipient: post.author,                               │
+  │    sender:    req.user._id,                              │
+  │    type:      'like',                                    │
+  │    post:      postId,                                    │
+  │    message:   `${displayName} liked your post`           │
   │  })                                                      │
   └──────────────────────────────────────────────────────────┘
-        │
-        ▼ (stored in MongoDB)
 
-USER READS notifications:
-        │
+USER reads notifications:
+          │
 GET /api/notifications
-        │
-  notificationController.getNotifications():
-  ┌──────────────────────────────────────────────────────────┐
-  │  Notification.find({ recipient: req.user._id })          │
-  │    .populate('sender', 'displayName avatarUrl')          │
-  │    .populate('post', 'title hashtag')                    │
-  │    .sort({ createdAt: -1 })                              │
-  │                                                          │
-  │  Index: { recipient:1, isRead:1, createdAt:-1 }          │
-  └──────────────────────────────────────────────────────────┘
-        │
-        ◄──── [{ notification1 }, ...]
+          │
+  Notification.find({ recipient: req.user._id })
+    .sort({ createdAt: -1 }).limit(30)
+    .populate('sender', 'displayName avatarUrl role')
+    .populate('post', 'title')
+  Index: { recipient:1, isRead:1, createdAt:-1 }
+          │
+  ◄── [{ notification1 }, ...]
 
 GET /api/notifications/unread-count
-        │
-        ◄──── { count: 5 }
-        │
-        ▼
-  NotificationsPage badge updates
+          │
+  Notification.countDocuments({ recipient, isRead: false })
+          │
+  ◄── { count: 5 }
+
+PATCH /api/notifications/read  ← mark all as read
 
 NOTIFICATION TYPES & TRIGGERS:
-┌──────────────────┬──────────────────────────────────────────────────┐
-│ Type             │ Trigger                                           │
-├──────────────────┼──────────────────────────────────────────────────┤
-│ like             │ Someone likes your post                           │
-│ dislike          │ Someone dislikes your post                        │
-│ comment          │ Someone comments on your post                     │
-│ follow           │ Someone follows your club account                  │
-│ mention          │ You are @mentioned in a post                      │
-│ new_post         │ A club you follow publishes a new post            │
-│ announcement     │ A club you follow creates a new story             │
-│ event_request    │ Admin: a student submitted an event request       │
-│ expiry_warning   │ Cron: your #foodsplit/#cabsplit post expires soon  │
-│ report           │ Admin: a post was reported (future use)           │
-└──────────────────┴──────────────────────────────────────────────────┘
+┌──────────────────┬────────────────────────────────────────────────────┐
+│ Type             │ Trigger                                             │
+├──────────────────┼────────────────────────────────────────────────────┤
+│ like             │ interactionController.toggleLike (new like only)   │
+│ dislike          │ interactionController.toggleDislike (new only)     │
+│ comment          │ interactionController.addComment                   │
+│ follow           │ interactionController.followClub (new follow only) │
+│ mention          │ postController.createPost (@mention extraction)    │
+│ new_post         │ postController.createPost (to all followers)       │
+│ announcement     │ POST /api/announcements (to all followers)         │
+│ event_request    │ eventController.createEvent (Student → all Admins) │
+│ expiry_warning   │ cron/postExpiry.js notifyPreExpiry() (once/post)   │
+│ report           │ POST /api/posts/:id/report (to all Admins)        │
+└──────────────────┴────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -381,40 +442,41 @@ NOTIFICATION TYPES & TRIGGERS:
 ## 📅 6. Event Request Approval Flow
 
 ```
-STUDENT submits event request:
-        │
+STUDENT submits event:
+          │
 POST /api/events
-  { title, date, time, venue, description, eventType }
-        │
+  { title, date, time, venue, description, eventType, ... }
+          │
   eventController.createEvent():
   ┌──────────────────────────────────────────────┐
-  │  If role === 'Student' → status: 'Pending'   │
-  │  If role === 'Club' or 'Admin' → 'Approved'  │
+  │  role === 'Student' → status: 'Pending'      │
+  │  role === 'Club'    → status: 'Approved'     │
+  │  role === 'Admin'   → status: 'Approved'     │
   │                                              │
-  │  If Pending → Notification{ type:'event_request' }  │
-  │               sent to ALL Admin users        │
+  │  If Pending → Notification{ type: 'event_request' }  │
+  │               sent to all Admin users        │
   └──────────────────────────────────────────────┘
 
-ADMIN reviews pending events:
-        │
-GET /api/events?status=Pending
-        │
-  eventController.getEvents():
-  Query filtered by status (Admin-only for Pending/Rejected)
+ADMIN approves or rejects:
+          │
+PATCH /api/events/:id/status     (adminOnly middleware)
+  { status: 'Approved' }
+          │
+  Event.findByIdAndUpdate → status updated
+          │
+  ◄── { success: true, data: event }
 
-ADMIN approves:
-        │
-PATCH /api/events/:id/status
-  { status: 'Approved' }  (Admin only, rbac middleware)
-        │
-  Event.findByIdAndUpdate({ status: 'Approved' })
-        │
-        ▼
-  Event now visible on public calendar to all students
+Status lifecycle:
+  Pending ──► Approved  (visible on calendar to all students)
+          ──► Rejected  (hidden from students)
 
-                  ┌────────────┐
-    Rejected ◄────┤  Pending   ├────► Approved ──► visible on calendar
-                  └────────────┘
+RSVP toggle:
+          │
+POST /api/events/:id/rsvp
+          │
+  userId in rsvps[] → remove | else → push
+          │
+  ◄── { success: true, rsvpCount, rsvped: true|false }
 ```
 
 ---
@@ -423,47 +485,48 @@ PATCH /api/events/:id/status
 
 ```
 STUDENT submits complaint:
-        │
+          │
 POST /api/complaints
   { title, description }
-        │
-  complaintController.createComplaint():
-  Complaint.create({ author: req.user._id, status: 'Open', ... })
-                │
-                ▼
-  complaint stored with author reference
+          │
+  Complaint.create({ author: req.user._id, status: 'Open' })
 
-GET /api/complaints (Student request):
-        │
+GET /api/complaints  (Student role):
+          │
   complaintController.getComplaints():
-  ┌──────────────────────────────────────────────────────┐
-  │  Complaint.find({ status filter })                   │
-  │  .select('-author')   ← author STRIPPED for Students │
-  │  ← privacy enforced at controller layer              │
-  └──────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────┐
+  │  Complaint.find(...)                             │
+  │  .select('-author')  ← author STRIPPED           │
+  └──────────────────────────────────────────────────┘
 
-GET /api/complaints (Admin request):
-        │
-  ┌──────────────────────────────────────────────────────┐
-  │  Complaint.find(...)                                 │
-  │  .populate('author', 'displayName role')  ← VISIBLE  │
-  └──────────────────────────────────────────────────────┘
+GET /api/complaints  (Admin role):
+          │
+  ┌──────────────────────────────────────────────────┐
+  │  Complaint.find(...)                             │
+  │  .populate('author', 'displayName role')  ← VISIBLE │
+  └──────────────────────────────────────────────────┘
 
-STUDENT upvotes:
-        │
+GET /api/complaints/mine
+  → Returns only the complaint IDs owned by req.user
+
+GET /api/complaints/search?q=keyword
+  → Keyword search across title + description (all users)
+
 POST /api/complaints/:id/upvote
-  → $addToSet / $pull toggle
+  → $addToSet / $pull toggle on upvotes[]
 
-ADMIN updates status:
-        │
-PATCH /api/complaints/:id/status
+PATCH /api/complaints/:id/edit   (author only, status must be Open)
+  { title, description }
+  → Updates fields, sets isEdited = true
+
+PATCH /api/complaints/:id        (Admin only)
   { status: 'Resolved', declineReason?: '...' }
-  (Admin only — rbac.js enforces this)
+  → Updates status
 
-STATUS LIFECYCLE:
-  Open  ──►  Resolved
-        ──►  Declined (+ declineReason)
-        ──►  Resolved (Verified)
+Status lifecycle:
+  Open ──► Resolved
+       ──► Declined           (with optional declineReason)
+       ──► Resolved (Verified)
 ```
 
 ---
@@ -472,45 +535,42 @@ STATUS LIFECYCLE:
 
 ```
 server.js startup
-        │
+          │
 connectDB() resolves
-        │
-startPostExpiryCron()
-        │
-  node-cron schedules: '*/5 * * * *'
-        │
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │  Every 5 minutes:                                                   │
-  │                                                                     │
-  │  1. notifyPreExpiry()                                               │
-  │     └─ Find posts: hashtag∈{#foodsplit,#cabsplit},                  │
-  │                    isActive=true, expiryWarned=false,               │
-  │                    expiresAt ∈ (now, now+35min]                     │
-  │     └─ Notification.insertMany(expiry_warning notifications)        │
-  │     └─ Post.updateMany → expiryWarned = true (prevents re-fire)     │
-  │                                                                     │
-  │  2. expireOldPosts()                                                │
-  │     └─ Find posts: hashtag∈{#foodsplit,#cabsplit},                  │
-  │                    expiresAt < now, isActive = true                 │
-  │     └─ Post.updateMany  → isActive = false  (soft delete)           │
-  │     └─ ChatRoom.updateMany → isActive = false (close chat rooms)    │
-  │                                                                     │
-  │  3. closeIdleGlobalRooms()                                          │
-  │     └─ ChatRoom.updateMany: isGlobal=true, isActive=true,           │
-  │                             lastMessageAt < 2hr ago                 │
-  │     └─ → isActive = false                                           │
-  │                                                                     │
-  │  4. expireAnnouncements()                                           │
-  │     └─ Announcement.updateMany: isActive=true, expiresAt < now      │
-  │     └─ → isActive = false                                           │
-  └─────────────────────────────────────────────────────────────────────┘
+          │
+startPostExpiryCron()   ← cron/postExpiry.js
+          │
+  node-cron: '*/5 * * * *'
 
-SOFT-DELETE PHILOSOPHY:
-  Documents are NEVER hard-deleted by the cron.
-  isActive = false preserves:
-    ✓ Chat history integrity (messages reference roomId)
-    ✓ Audit trail for complaints and events
-    ✓ Post data for analytics (future use)
+Every 5 minutes:
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│  1. notifyPreExpiry()                                               │
+│     Find: hashtag ∈ {#foodsplit,#cabsplit}, isActive=true,          │
+│            expiryWarned=false,                                      │
+│            expiresAt ∈ (now, now+35min]                             │
+│     → Notification.insertMany({ type:'expiry_warning' }) per author │
+│     → Post.updateMany → expiryWarned = true (prevents re-fire)      │
+│                                                                     │
+│  2. expireOldPosts()                                                │
+│     Find: hashtag ∈ {#foodsplit,#cabsplit},                         │
+│            expiresAt < now, isActive = true                         │
+│     → Post.updateMany     → isActive = false  (soft delete)         │
+│     → ChatRoom.updateMany → isActive = false  (close linked rooms)  │
+│                                                                     │
+│  3. closeIdleGlobalRooms()                                          │
+│     Find: isGlobal=true, isActive=true,                             │
+│            lastMessageAt < 2 hours ago                              │
+│     → ChatRoom.updateMany → isActive = false                        │
+│                                                                     │
+│  4. expireAnnouncements()                                           │
+│     Find: isActive=true, expiresAt < now                            │
+│     → Announcement.updateMany → isActive = false                    │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+Documents are NEVER hard-deleted. isActive = false preserves
+chat message history and provides an audit trail.
 ```
 
 ---
@@ -520,41 +580,44 @@ SOFT-DELETE PHILOSOPHY:
 ```
 App.jsx
   │
-  ├── AuthProvider (context/AuthContext.js)
-  │     State: { token, user, loading }
-  │     Storage: localStorage 'cb_token'
+  ├── AuthProvider  (context/AuthContext.js)
+  │     State:    { token, user, loading }
+  │     Storage:  localStorage 'cb_token'
   │     Provides: login(), logout(), updateUser()
   │
-  └── SocketProvider (context/SocketContext.js)
-        State: { socket (ref), connected }
+  └── SocketProvider  (context/SocketContext.js)
+        State:    { socket (ref), connected }
         Lifecycle:
-          token present  → io(SOCKET_URL, { auth: { token } })
-          token removed  → socket.disconnect()
+          token present → io(SOCKET_URL, { auth: { token } })
+                          transports: ['polling', 'websocket']
+                          reconnectionAttempts: 5
+          token removed → socket.disconnect()
         Provides: { socket, connected }
 
-Per-page data fetching:
-  ┌───────────────────────────────────────────────────────────────┐
-  │  Each page manages its own local state via useState/useEffect │
-  │  + Axios (configured with baseURL + Authorization header)    │
-  │                                                               │
-  │  ChatHubPage.jsx — also uses useSocket() to:                  │
-  │    • emit joinGlobalRoom / sendGlobalMsg                      │
-  │    • listen for globalMessage / onlineUsersUpdate             │
-  │                                                               │
-  │  PostCard.jsx — uses useSocket() to:                          │
-  │    • emit joinRoom / sendMessage / closeRoom / cabLocation    │
-  │    • listen for joinedRoom / newMessage / roomClosed          │
-  │    • listen for cabLocationUpdate → CabTracker marker move   │
-  └───────────────────────────────────────────────────────────────┘
+SOCKET_URL resolution order:
+  1. process.env.REACT_APP_SOCKET_URL
+  2. process.env.REACT_APP_API_URL (strip /api suffix)
+  3. window.location.origin (production same-origin)
+  4. 'http://localhost:5000' (local dev fallback)
 
-Context tree:
-  <AuthProvider>
-    <SocketProvider>          ← depends on token from AuthProvider
-      <BrowserRouter>
-        <Routes>
-          <ProtectedRoute>   ← reads AuthContext, redirects to /login if no token
-            <AuthLayout>     ← Navbar + main + optional RightPanel
-              <Page />
+Pages using socket (via useSocket() hook):
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  ChatHubPage.jsx                                                 │
+  │    emit: joinGlobalRoom, sendGlobalMsg, leaveGlobalRoom,         │
+  │           closeGlobalRoom                                        │
+  │    on:   globalJoined, globalMessage, onlineUsersUpdate,         │
+  │           globalRoomClosed, roomsUpdated                         │
+  │                                                                  │
+  │  PostCard.jsx                                                    │
+  │    emit: joinRoom, sendMessage, closeRoom, cabLocation           │
+  │    on:   joinedRoom, newMessage, roomClosed, userJoined,         │
+  │           cabLocationUpdate, roomError                           │
+  └──────────────────────────────────────────────────────────────────┘
+
+Route protection:
+  <ProtectedRoute>  ← reads AuthContext, redirects to /login if no token
+    <AuthLayout>    ← Navbar (left sidebar / bottom bar) + optional RightPanel
+      <Page />
 ```
 
 ---
@@ -563,13 +626,15 @@ Context tree:
 
 | Collection | Index | Purpose |
 |------------|-------|---------|
-| **User** | `instituteEmail` (unique) | Fast login lookup |
-| **User** | `rollNo` (unique, sparse) | Roll-no based search |
+| **User** | `instituteEmail` (unique) | Login lookup |
+| **User** | `rollNo` (unique, sparse) | Roll-number check on register |
 | **Post** | `{ isActive: 1, createdAt: -1 }` | Main feed query |
 | **Post** | `{ hashtag: 1, expiresAt: 1, isActive: 1 }` | Cron expiry query |
 | **ChatRoom** | `postId` | Post-linked room lookup |
-| **ChatRoom** | `isGlobal`, `isActive`, `lastMessageAt` | Hub room queries + cron |
-| **Announcement** | `{ isActive: 1, expiresAt: 1, author: 1 }` | Stories feed + cron |
+| **ChatRoom** | `isGlobal` | Hub room filter |
+| **ChatRoom** | `isActive` | Active room filter |
+| **ChatRoom** | `lastMessageAt` | Idle room cleanup by cron |
+| **Announcement** | `{ isActive: 1, expiresAt: 1, author: 1 }` | Active stories feed + cron |
 | **Notification** | `{ recipient: 1, isRead: 1, createdAt: -1 }` | Notification centre |
 | **Event** | `{ status: 1, date: 1 }` | Calendar view |
 | **Complaint** | `status` | Complaint board filter |

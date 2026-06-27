@@ -1,9 +1,9 @@
 # 📡 Campus Buzz — API Reference
 
-> Complete REST API documentation for the Campus Buzz backend.
+> Complete REST API documentation based on `backend/routes/index.js` and `backend/routes/userRoutes.js`.
 > Base URL: `http://localhost:5000/api` (dev) | `https://your-backend.onrender.com/api` (prod)
 
-All protected routes require the header:
+All protected routes require:
 ```
 Authorization: Bearer <JWT_TOKEN>
 ```
@@ -13,12 +13,12 @@ Authorization: Bearer <JWT_TOKEN>
 ## Table of Contents
 - [Auth](#-auth)
 - [Posts](#-posts)
-- [Comments & Interactions](#-comments--interactions)
 - [Events](#-events)
 - [Complaints](#-complaints)
 - [Announcements](#-announcements)
 - [Notifications](#-notifications)
 - [Users](#-users)
+- [Clubs](#-clubs)
 - [Chat Rooms](#-chat-rooms)
 
 ---
@@ -29,23 +29,68 @@ Authorization: Bearer <JWT_TOKEN>
 ```
 POST /api/auth/register
 ```
+**Auth:** ❌
+
 **Body:**
 ```json
 {
+  "rollNo": "21CSE123",
   "instituteEmail": "jdoe123.btech2022@cse.nitrr.ac.in",
   "password": "SecurePass123!",
   "displayName": "John Doe",
   "role": "Student"
 }
 ```
-**Response `201`:**
+
+**Response `201`** — OTP sent, user not yet active:
+```json
+{
+  "success": true,
+  "requiresVerification": true,
+  "instituteEmail": "jdoe123.btech2022@cse.nitrr.ac.in",
+  "message": "Verification code sent to your email."
+}
+```
+
+> If the email already exists but is unverified, responds `200` with a fresh OTP resent.
+
+---
+
+### Verify OTP
+```
+POST /api/auth/verify-otp
+```
+**Auth:** ❌
+
+**Body:**
+```json
+{ "instituteEmail": "jdoe123.btech2022@cse.nitrr.ac.in", "otp": "482913" }
+```
+
+**Response `200`:**
 ```json
 {
   "success": true,
   "token": "eyJhbGciOiJIUzI1...",
-  "user": { "_id": "...", "displayName": "John Doe", "role": "Student", "instituteEmail": "..." }
+  "user": { "_id": "...", "displayName": "John Doe", "role": "Student", "isVerified": true, ... }
 }
 ```
+
+> Max 5 incorrect attempts before account is locked until a new OTP is requested. OTP expires in 10 minutes.
+
+---
+
+### Resend OTP
+```
+POST /api/auth/resend-otp
+```
+**Auth:** ❌
+
+**Body:** `{ "instituteEmail": "jdoe123.btech2022@cse.nitrr.ac.in" }`
+
+**Response `200`:** `{ "success": true, "message": "A new verification code has been sent." }`
+
+> Rate-limited: one resend per 30 seconds per user.
 
 ---
 
@@ -53,6 +98,8 @@ POST /api/auth/register
 ```
 POST /api/auth/login
 ```
+**Auth:** ❌
+
 **Body:**
 ```json
 {
@@ -60,10 +107,13 @@ POST /api/auth/login
   "password": "SecurePass123!"
 }
 ```
+
 **Response `200`:**
 ```json
 { "success": true, "token": "eyJ...", "user": { ... } }
 ```
+
+> If account is unverified, responds `403` with `requiresVerification: true` and re-sends OTP.
 
 ---
 
@@ -71,17 +121,35 @@ POST /api/auth/login
 ```
 POST /api/auth/forgot-password
 ```
-**Body:** `{ "email": "jdoe123.btech2022@cse.nitrr.ac.in" }`
-**Response `200`:** `{ "success": true, "message": "Reset email sent." }`
+**Auth:** ❌
+
+**Body:** `{ "instituteEmail": "jdoe123.btech2022@cse.nitrr.ac.in" }`
+
+**Response `200`:** `{ "success": true, "data": "Email sent" }`
+
+> Sends a password-reset link to the user's email. Link is valid for 10 minutes.
 
 ---
 
 ### Reset Password
 ```
-PUT /api/auth/reset-password/:token
+PATCH /api/auth/reset-password/:token
 ```
+**Auth:** ❌
+
 **Body:** `{ "password": "NewSecurePass456!" }`
+
 **Response `200`:** `{ "success": true, "token": "eyJ...", "user": { ... } }`
+
+---
+
+### Get Current User
+```
+GET /api/auth/me
+```
+**Auth:** ✅
+
+**Response `200`:** `{ "success": true, "user": { ... } }`
 
 ---
 
@@ -89,9 +157,18 @@ PUT /api/auth/reset-password/:token
 
 ### Get Feed
 ```
-GET /api/posts?page=1&limit=10&hashtag=#cabsplit&author=<userId>
+GET /api/posts?page=1&limit=10&hashtag=#cabsplit&feed=club&author=<userId>
 ```
-**Auth:** ✅ | **Roles:** All
+**Auth:** ✅
+
+Query params:
+| Param | Description |
+|-------|-------------|
+| `page` | Page number (default: 1) |
+| `limit` | Items per page |
+| `hashtag` | Filter by hashtag (e.g. `#foodsplit`) |
+| `feed=club` | Return only Club/Admin posts |
+| `author` | Filter by author ID |
 
 **Response `200`:**
 ```json
@@ -100,24 +177,45 @@ GET /api/posts?page=1&limit=10&hashtag=#cabsplit&author=<userId>
   "posts": [
     {
       "_id": "...",
-      "title": "Cab to Airport - share?",
-      "description": "Leaving at 6 AM, 3 seats free. Total fare ₹800.",
+      "title": "Cab to Airport — share?",
+      "description": "Leaving at 6 AM, 3 seats free.",
       "imageUrl": "data:image/...",
       "hashtag": "#cabsplit",
       "totalFare": 800,
       "expiresAt": "2026-06-28T00:00:00.000Z",
       "isActive": true,
       "isExpired": false,
-      "likes": ["userId1", "userId2"],
+      "likes": ["userId1"],
       "dislikes": [],
+      "customTags": [],
+      "mentions": [],
       "author": { "_id": "...", "displayName": "Ravi Kumar", "avatarUrl": null, "role": "Student" },
       "createdAt": "2026-06-27T14:00:00.000Z"
     }
-  ],
-  "page": 1,
-  "totalPages": 5
+  ]
 }
 ```
+
+---
+
+### Get Trending Hashtags
+```
+GET /api/posts/trending-hashtags
+```
+**Auth:** ✅
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "data": [
+    { "hashtag": "#cabsplit", "count": 12 },
+    { "hashtag": "#foodsplit", "count": 9 }
+  ]
+}
+```
+
+> Returns top 5 hashtags by active post count.
 
 ---
 
@@ -125,20 +223,28 @@ GET /api/posts?page=1&limit=10&hashtag=#cabsplit&author=<userId>
 ```
 POST /api/posts
 ```
-**Auth:** ✅ | **Roles:** All
+**Auth:** ✅
 
 **Body:**
 ```json
 {
   "title": "Lost my blue bottle near LH",
-  "description": "Lost near Library Hall, contact if found.",
+  "description": "Lost near Library Hall. @jdoe123 please help find.",
   "imageUrl": "data:image/jpeg;base64,...",
   "hashtag": "#lost",
   "customTags": ["library", "bottle"]
 }
 ```
-> For `#foodsplit` / `#cabsplit`: also include `"expiresAt": "2026-06-28T06:00:00Z"`
-> For `#cabsplit`: optionally include `"totalFare": 600`
+
+For `#foodsplit` / `#cabsplit` — also include:
+```json
+{ "expiresAt": "2026-06-28T06:00:00Z" }
+```
+
+For `#cabsplit` — optionally include:
+```json
+{ "totalFare": 600 }
+```
 
 **Response `201`:** `{ "success": true, "post": { ... } }`
 
@@ -148,6 +254,20 @@ POST /api/posts
 ```
 GET /api/posts/:id
 ```
+**Auth:** ✅
+
+**Response `200`:** `{ "success": true, "post": { ... } }`
+
+---
+
+### Update Post
+```
+PATCH /api/posts/:id
+```
+**Auth:** ✅ | **Role:** Author
+
+**Body:** Any subset of `{ title, description, imageUrl, customTags }`
+
 **Response `200`:** `{ "success": true, "post": { ... } }`
 
 ---
@@ -156,35 +276,50 @@ GET /api/posts/:id
 ```
 DELETE /api/posts/:id
 ```
-**Auth:** ✅ | **Roles:** Author or Admin
+**Auth:** ✅ | **Role:** Author or Admin
 
 **Response `200`:** `{ "success": true, "message": "Post deleted." }`
 
 ---
 
-### Like / Dislike (toggle)
+### Toggle Like
 ```
 POST /api/posts/:id/like
+```
+**Auth:** ✅
+
+**Response `200`:** `{ "success": true, "likes": [...], "dislikes": [...] }`
+
+> Removes the like if the user already liked it. Also removes an existing dislike when adding a like.
+
+---
+
+### Toggle Dislike
+```
 POST /api/posts/:id/dislike
 ```
+**Auth:** ✅
+
 **Response `200`:** `{ "success": true, "likes": [...], "dislikes": [...] }`
 
 ---
 
-### Save / Unsave (toggle)
+### Toggle Save (Bookmark)
 ```
 POST /api/posts/:id/save
 ```
+**Auth:** ✅
+
 **Response `200`:** `{ "success": true, "saved": true }`
 
 ---
-
-## 💬 Comments & Interactions
 
 ### Get Comments
 ```
 GET /api/posts/:id/comments
 ```
+**Auth:** ✅
+
 **Response `200`:**
 ```json
 {
@@ -206,41 +341,41 @@ GET /api/posts/:id/comments
 ```
 POST /api/posts/:id/comments
 ```
-**Body:** `{ "text": "I'll join!" }`
+**Auth:** ✅
+
+**Body:** `{ "text": "I'll join the cab!" }`
+
 **Response `201`:** `{ "success": true, "comment": { ... } }`
 
 ---
 
-### Delete Comment
+### Report Post
 ```
-DELETE /api/posts/:postId/comments/:commentId
+POST /api/posts/:id/report
 ```
-**Roles:** Author of comment or Admin
-**Response `200`:** `{ "success": true }`
+**Auth:** ✅ | **Constraint:** Cannot report your own post
 
----
+**Response `200`:** `{ "success": true, "message": "Report submitted. Our team will review it." }`
 
-### Follow / Unfollow User (toggle)
-```
-POST /api/users/:id/follow
-```
-**Response `200`:** `{ "success": true, "following": true }`
+> Sends a `report` notification to every Admin account.
 
 ---
 
 ## 📅 Events
 
-### Get Events (Calendar)
+### Get Events
 ```
-GET /api/events?month=6&year=2026&status=Approved
+GET /api/events
 ```
 **Auth:** ✅
+
+> Students see only `Approved` events. Admins see all statuses.
 
 **Response `200`:**
 ```json
 {
   "success": true,
-  "events": [
+  "data": [
     {
       "_id": "...",
       "title": "Annual Tech Fest 2026",
@@ -263,7 +398,7 @@ GET /api/events?month=6&year=2026&status=Approved
 ```
 POST /api/events
 ```
-**Auth:** ✅ | **Roles:** Any (Students → Pending, Clubs/Admin → Approved)
+**Auth:** ✅
 
 **Body:**
 ```json
@@ -271,27 +406,49 @@ POST /api/events
   "title": "Python Workshop",
   "date": "2026-07-20",
   "time": "2:00 PM",
-  "venue": "CS Department Seminar Hall",
-  "description": "Hands-on Python basics for freshers.",
+  "venue": "CS Seminar Hall",
+  "description": "Hands-on Python basics.",
   "eventType": "Offline"
 }
 ```
 
+For online events, include `meetingLink` and `passcode`. For offline, include `mapLink`.
+
+> Club/Admin → `status: Approved` immediately. Student → `status: Pending`, notifies all Admins.
+
+**Response `201`:** `{ "success": true, "data": { ...event } }`
+
 ---
 
-### RSVP (toggle)
+### Request Event (explicit route)
+```
+POST /api/events/request
+```
+**Auth:** ✅
+
+Same body as Create Event. Always sets `status: Pending` regardless of role.
+
+---
+
+### Toggle RSVP
 ```
 POST /api/events/:id/rsvp
 ```
-**Response `200`:** `{ "success": true, "rsvps": [...], "rsvped": true }`
+**Auth:** ✅
+
+**Response `200`:** `{ "success": true, "rsvpCount": 5, "rsvped": true }`
 
 ---
 
-### Update Event Status (Admin only)
+### Update Event Status
 ```
 PATCH /api/events/:id/status
 ```
-**Body:** `{ "status": "Approved" }` | `{ "status": "Rejected" }`
+**Auth:** ✅ | **Role:** Admin only
+
+**Body:** `{ "status": "Approved" }` or `{ "status": "Rejected" }`
+
+**Response `200`:** `{ "success": true, "data": { ...event } }`
 
 ---
 
@@ -299,18 +456,46 @@ PATCH /api/events/:id/status
 ```
 DELETE /api/events/:id
 ```
-**Roles:** Creator or Admin
+**Auth:** ✅ | **Role:** Admin only
+
+**Response `200`:** `{ "success": true }`
 
 ---
 
 ## 🗳️ Complaints
 
-### Get All Complaints
+### Get Complaints
 ```
-GET /api/complaints?status=Open&page=1
+GET /api/complaints?status=Open
 ```
-> Students receive list **without** `author` field.
-> Admins receive list **with populated** `author`.
+**Auth:** ✅
+
+> **Students** receive the list with `author` field removed (anonymised).
+> **Admins** receive the list with `author` populated.
+
+---
+
+### Get My Complaint IDs
+```
+GET /api/complaints/mine
+```
+**Auth:** ✅
+
+**Response `200`:** `{ "success": true, "data": ["complaintId1", "complaintId2"] }`
+
+> Returns only the IDs of complaints submitted by the current user — used by the frontend to identify owned complaints.
+
+---
+
+### Search Complaints
+```
+GET /api/complaints/search?q=broken+ac
+```
+**Auth:** ✅
+
+**Response `200`:** `{ "success": true, "data": [{ ...complaint }] }`
+
+> Keyword search across `title` and `description`. Used for duplicate detection before submitting.
 
 ---
 
@@ -318,6 +503,8 @@ GET /api/complaints?status=Open&page=1
 ```
 POST /api/complaints
 ```
+**Auth:** ✅
+
 **Body:**
 ```json
 {
@@ -325,55 +512,82 @@ POST /api/complaints
   "description": "The AC in Room CS-204 has been non-functional for 3 weeks."
 }
 ```
-**Response `201`:** `{ "success": true, "complaint": { ... } }`
+
+**Response `201`:** `{ "success": true, "data": { ...complaint } }`
 
 ---
 
-### Upvote Complaint (toggle)
+### Toggle Upvote
 ```
 POST /api/complaints/:id/upvote
 ```
+**Auth:** ✅
+
 **Response `200`:** `{ "success": true, "upvotes": [...] }`
 
 ---
 
-### Update Complaint Status (Admin only)
+### Edit Complaint
 ```
-PATCH /api/complaints/:id/status
+PATCH /api/complaints/:id/edit
 ```
+**Auth:** ✅ | **Role:** Author only | **Constraint:** Status must be `Open`
+
+**Body:** `{ "title": "Updated title", "description": "Updated description" }`
+
+**Response `200`:** `{ "success": true, "data": { ...complaint, "isEdited": true } }`
+
+---
+
+### Update Complaint Status
+```
+PATCH /api/complaints/:id
+```
+**Auth:** ✅ | **Role:** Admin only
+
 **Body:**
 ```json
 {
   "status": "Declined",
-  "declineReason": "This falls outside the admin scope. Contact maintenance."
+  "declineReason": "Outside admin scope. Contact maintenance."
 }
 ```
 
----
+Valid statuses: `Open`, `Resolved`, `Declined`, `Resolved (Verified)`
 
-### Edit Complaint (own, while Open)
-```
-PUT /api/complaints/:id
-```
-**Body:** `{ "title": "...", "description": "..." }`
+**Response `200`:** `{ "success": true, "data": { ...complaint } }`
 
 ---
 
-### Delete Complaint
-```
-DELETE /api/complaints/:id
-```
-**Roles:** Author (only if Open) or Admin
-
----
-
-## 📣 Announcements (Stories)
+## 📣 Announcements
 
 ### Get Active Announcements
 ```
 GET /api/announcements
 ```
-Returns announcements from clubs the user follows + own announcements.
+**Auth:** ✅
+
+Returns active, non-expired announcements from clubs the current user follows, plus the user's own announcements.
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "...",
+      "text": "Hackathon registrations now open!",
+      "imageUrl": null,
+      "durationHours": 24,
+      "expiresAt": "2026-06-28T14:00:00.000Z",
+      "isActive": true,
+      "seenBy": [],
+      "author": { "_id": "...", "displayName": "TechClub NITRR", "role": "Club" },
+      "createdAt": "..."
+    }
+  ]
+}
+```
 
 ---
 
@@ -381,7 +595,7 @@ Returns announcements from clubs the user follows + own announcements.
 ```
 POST /api/announcements
 ```
-**Auth:** ✅ | **Roles:** Club or Admin
+**Auth:** ✅ | **Role:** Club or Admin
 
 **Body:**
 ```json
@@ -392,12 +606,20 @@ POST /api/announcements
 }
 ```
 
+> Must include at least one of `text` or `imageUrl`. `durationHours` is clamped to `[1, 48]`.
+> Sends an `announcement` notification to all followers.
+
+**Response `201`:** `{ "success": true, "data": { ...announcement } }`
+
 ---
 
-### Mark as Seen
+### Mark Announcement as Seen
 ```
 POST /api/announcements/:id/seen
 ```
+**Auth:** ✅
+
+**Response `200`:** `{ "success": true }`
 
 ---
 
@@ -405,7 +627,11 @@ POST /api/announcements/:id/seen
 ```
 DELETE /api/announcements/:id
 ```
-**Roles:** Author or Admin
+**Auth:** ✅ | **Role:** Author or Admin
+
+Sets `isActive = false` (soft delete).
+
+**Response `200`:** `{ "success": true }`
 
 ---
 
@@ -413,19 +639,23 @@ DELETE /api/announcements/:id
 
 ### Get Notifications
 ```
-GET /api/notifications?page=1&limit=20
+GET /api/notifications
 ```
+**Auth:** ✅
+
+Returns the last 30 notifications for the current user.
+
 **Response `200`:**
 ```json
 {
   "success": true,
-  "notifications": [
+  "data": [
     {
       "_id": "...",
       "type": "like",
       "message": "Priya Sharma liked your post",
-      "sender": { "displayName": "Priya Sharma", "avatarUrl": null },
-      "post": { "title": "Cab to Airport", "hashtag": "#cabsplit" },
+      "sender": { "displayName": "Priya Sharma", "avatarUrl": null, "role": "Student" },
+      "post": { "_id": "...", "title": "Cab to Airport" },
       "isRead": false,
       "createdAt": "..."
     }
@@ -439,93 +669,130 @@ GET /api/notifications?page=1&limit=20
 ```
 GET /api/notifications/unread-count
 ```
+**Auth:** ✅
+
 **Response `200`:** `{ "success": true, "count": 3 }`
 
 ---
 
 ### Mark All as Read
 ```
-PUT /api/notifications/read-all
+PATCH /api/notifications/read
 ```
+**Auth:** ✅
 
----
-
-### Mark Single as Read
-```
-PUT /api/notifications/:id/read
-```
+**Response `200`:** `{ "success": true }`
 
 ---
 
 ## 👤 Users
 
-### Get Own Profile
+### List Users
 ```
-GET /api/users/profile
+GET /api/users?role=Admin&limit=50
 ```
-**Response `200`:**
-```json
-{
-  "success": true,
-  "user": {
-    "_id": "...",
-    "displayName": "John Doe",
-    "instituteEmail": "jdoe123.btech2022@cse.nitrr.ac.in",
-    "role": "Student",
-    "bio": "CSE 2022 batch. Loves competitive programming.",
-    "avatarUrl": null,
-    "followers": [],
-    "following": ["clubId1"],
-    "savedPosts": ["postId1", "postId2"]
-  }
-}
+**Auth:** ✅
+
+Returns `_id`, `displayName`, `avatarUrl`, `rollNo`, `role`. Max 100 results.
+
+---
+
+### Search Users (Autocomplete)
 ```
+GET /api/users/search?q=priya
+```
+**Auth:** ✅
+
+Returns up to 8 users matching `displayName` (case-insensitive). Used for @mention autocomplete.
+
+**Response `200`:** `{ "success": true, "data": [{ "_id", "displayName", "avatarUrl", "role" }] }`
+
+---
+
+### Get Saved Posts
+```
+GET /api/users/me/saved
+```
+**Auth:** ✅
+
+**Response `200`:** `{ "success": true, "data": [{ ...post }] }`
 
 ---
 
 ### Update Own Profile
 ```
-PUT /api/users/profile
+PATCH /api/users/profile
 ```
-**Body:** `{ "displayName": "John D.", "bio": "Updated bio", "avatarUrl": "data:image/..." }`
+**Auth:** ✅
+
+**Body:** Any subset of `{ "displayName", "bio", "avatarUrl" }`
+
+**Response `200`:** `{ "success": true, "data": { ...safeUser } }`
 
 ---
 
-### Get Public Profile
+### Change Password
+```
+PATCH /api/users/change-password
+```
+**Auth:** ✅
+
+**Body:**
+```json
+{ "currentPassword": "OldPass123!", "newPassword": "NewPass456!" }
+```
+
+**Response `200`:** `{ "success": true, "message": "Password changed successfully." }`
+
+---
+
+### Get Public User Profile
 ```
 GET /api/users/:id
 ```
-Returns public info + follower count (no savedPosts).
+**Auth:** ✅
+
+Returns: `displayName`, `avatarUrl`, `role`, `bio`, `followers`, `following`, `createdAt`, `rollNo`, `instituteEmail`.
+
+**Response `200`:** `{ "success": true, "data": { ...user } }`
 
 ---
 
-### Search Users
+### Toggle Follow
 ```
-GET /api/users/search?q=priya&role=Club
+POST /api/users/:id/follow
 ```
+**Auth:** ✅
+
+Toggles follow/unfollow. On new follow → creates a `follow` notification for the followed user.
+
+**Response `200`:** `{ "success": true, "following": true }`
 
 ---
 
-## 🏠 Chat Rooms (Global Hub)
+## 🏛️ Clubs
 
-### List Active Global Rooms
+### List Clubs & Admins
 ```
-GET /api/rooms
+GET /api/clubs
 ```
+**Auth:** ✅
+
+Returns all accounts with `role: Club` or `role: Admin`, sorted by `displayName`.
+
 **Response `200`:**
 ```json
 {
   "success": true,
-  "rooms": [
+  "data": [
     {
       "_id": "...",
-      "name": "Airport Cab Group",
-      "hashtag": "#cabsplit",
-      "isGlobal": true,
-      "isActive": true,
-      "createdBy": { "displayName": "Ravi Kumar" },
-      "participantCount": 5,
-      "lastMessageAt": "2026-06-27T13:45:00.000Z"
+      "displayName": "TechClub NITRR",
+      "avatarUrl": null,
+      "role": "Club",
+      "bio": "Coding and tech events.",
+      "followers": ["userId1"],
+      "following": []
     }
   ]
 }
@@ -533,47 +800,150 @@ GET /api/rooms
 
 ---
 
+## 🏠 Chat Rooms
+
+### List Active Rooms
+```
+GET /api/rooms
+```
+**Auth:** ✅
+
+Returns both global hub rooms and active post-linked rooms, each tagged with `_roomType: 'global' | 'post'`.
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "...",
+      "_roomType": "global",
+      "name": "Airport Cab Group",
+      "hashtag": "#cabsplit",
+      "isGlobal": true,
+      "isActive": true,
+      "createdBy": { "displayName": "Ravi Kumar", "role": "Student" },
+      "lastMessageAt": "2026-06-27T13:45:00.000Z"
+    },
+    {
+      "_id": "...",
+      "_roomType": "post",
+      "name": "Lost my blue bottle near LH",
+      "hashtag": "#lost",
+      "isGlobal": false,
+      "postId": { "title": "...", "hashtag": "#lost", "author": "..." }
+    }
+  ]
+}
+```
+
+---
+
+### Get Allowed Hashtags
+```
+GET /api/rooms/hashtags
+```
+**Auth:** ✅
+
+**Response `200`:** `{ "success": true, "data": ["#general", "#announcements", "#foodsplit", ...] }`
+
+---
+
 ### Create Global Room
 ```
 POST /api/rooms
 ```
+**Auth:** ✅
+
 **Body:**
 ```json
-{
-  "name": "Weekend Trek Planning",
-  "hashtag": "#misc"
-}
+{ "name": "Weekend Trek Planning", "hashtag": "#misc" }
 ```
-**Response `201`:** `{ "success": true, "room": { ... } }`
+
+**Response `201`:** `{ "success": true, "data": { ...room } }`
 
 ---
 
-### Get Room Details
+### Find or Create Room for a Post
 ```
-GET /api/rooms/:id
+POST /api/rooms/from-post/:postId
 ```
+**Auth:** ✅
+
+Finds an existing active room for the given post, or creates one if none exists.
+
+**Response `200`:** `{ "success": true, "data": { ...room } }`
+
+---
+
+### Get Room Messages
+```
+GET /api/rooms/:id/messages
+```
+**Auth:** ✅
+
+Returns the last 60 messages for the room, oldest first.
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "...",
+      "text": "I'm in!",
+      "senderId": { "displayName": "Priya", "avatarUrl": null, "role": "Student" },
+      "timestamp": "..."
+    }
+  ]
+}
+```
+
+---
+
+### Close a Global Room
+```
+DELETE /api/rooms/:id
+```
+**Auth:** ✅ | **Role:** Room creator or Admin
+
+Sets `isActive = false`.
+
+**Response `200`:** `{ "success": true, "message": "Room closed." }`
+
+---
+
+### Close a Post-Linked Room
+```
+PATCH /api/chat-rooms/:postId/close
+```
+**Auth:** ✅ | **Role:** Post author or Admin
+
+**Response `200`:** `{ "success": true, "message": "Chat room closed." }`
 
 ---
 
 ## ⚠️ Error Response Format
 
-All error responses follow this shape:
+All errors follow this structure:
 ```json
 {
   "success": false,
-  "message": "Human-readable error description",
-  "stack": "..." // Only in development mode
+  "message": "Human-readable description",
+  "stack": "..."
 }
 ```
+> `stack` is only included when `NODE_ENV=development`.
 
-**Common HTTP status codes:**
 | Code | Meaning |
 |------|---------|
 | `400` | Bad request / validation failure |
 | `401` | Not authenticated (missing or invalid JWT) |
-| `403` | Forbidden (insufficient role) |
+| `403` | Forbidden (insufficient role, or email unverified) |
 | `404` | Resource not found |
-| `409` | Conflict (e.g., duplicate email) |
+| `409` | Conflict (duplicate email or roll number) |
+| `422` | Mongoose validation error |
+| `429` | Rate limit (OTP resend throttle / too many OTP attempts) |
 | `500` | Internal server error |
 
 ---
