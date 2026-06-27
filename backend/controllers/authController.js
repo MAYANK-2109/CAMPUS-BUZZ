@@ -61,7 +61,7 @@ const sendAuthResponse = (res, statusCode, user, token) => {
 // ── POST /api/auth/register ──────────────────────────────────────────────────
 exports.register = async (req, res) => {
   try {
-    const { rollNo, instituteEmail, password, role, displayName } = req.body;
+    const { rollNo, instituteEmail, password, displayName } = req.body;
     const email = instituteEmail?.toLowerCase();
     const roll  = rollNo ? rollNo.toUpperCase() : undefined;
 
@@ -91,12 +91,14 @@ exports.register = async (req, res) => {
       }
     }
 
-    // passwordHash field triggers the pre-save bcrypt hook in User model
+    // SECURITY: role is NEVER taken from the request body. All self-service
+    // signups are Students. Club/Admin roles are granted only by an Admin via
+    // PATCH /api/users/:id/role (or a seeded admin account).
     const user = await User.create({
       rollNo:         roll,
       instituteEmail: email,
       passwordHash:   password,       // Hook will hash this
-      role:           role || 'Student',
+      role:           'Student',
       displayName:    displayName || rollNo,
       isVerified:     false,
     });
@@ -128,17 +130,27 @@ exports.register = async (req, res) => {
 // ── POST /api/auth/login ─────────────────────────────────────────────────────
 exports.login = async (req, res) => {
   try {
+    // The `instituteEmail` field carries the login identifier, which may be an
+    // institute email OR a roll number (per spec: "Login via roll number and
+    // institute email").
     const { instituteEmail, password } = req.body;
+    const identifier = (instituteEmail || '').trim();
 
-    if (!instituteEmail || !password) {
+    if (!identifier || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Email and password are required.',
+        message: 'Email or roll number and password are required.',
       });
     }
 
-    // findByEmailWithPassword explicitly selects passwordHash
-    const user = await User.findByEmailWithPassword(instituteEmail);
+    // Match either the institute email or the roll number (passwordHash + otpHash
+    // explicitly selected for the verification gate below).
+    const user = await User.findOne({
+      $or: [
+        { instituteEmail: identifier.toLowerCase() },
+        { rollNo:         identifier.toUpperCase() },
+      ],
+    }).select('+passwordHash +otpHash');
 
     if (!user) {
       // Generic message prevents email enumeration
@@ -150,20 +162,15 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials.' });
     }
 
-    // Email-verification gate.
-    if (!user.isVerified) {
-      if (user.otpHash) {
-        // Pending verification from the new signup flow → re-send a fresh code.
-        await issueAndSendOtp(user);
-        return res.status(403).json({
-          success:             false,
-          requiresVerification: true,
-          instituteEmail:      user.instituteEmail,
-          message:             'Please verify your email. A new code has been sent.',
-        });
-      }
-      // Legacy account created before OTP existed → auto-verify on login.
-      user.isVerified = true;
+    // Once credentials are correct, the account is considered verified. Email
+    // verification is collected at signup (OTP screen); we no longer hard-block
+    // login for unverified accounts, which was returning 403 and locking users
+    // out. Mark verified on first successful login and clear any pending OTP.
+    if (!user.isVerified || user.otpHash) {
+      user.isVerified  = true;
+      user.otpHash     = undefined;
+      user.otpExpire   = undefined;
+      user.otpAttempts = 0;
       await user.save({ validateBeforeSave: false });
     }
 
