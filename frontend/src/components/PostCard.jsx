@@ -387,6 +387,16 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
             </Link>
             {post.title}
           </p>
+
+          {/* ── CabSplit Fare Badge ──────────────────────────────────────── */}
+          {post.hashtag === '#cabsplit' && post.totalFare != null && (
+            <div className="mt-2 inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl px-3 py-1.5">
+              <span className="text-base font-bold">🚕</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-blue-500">Total Fare</span>
+              <span className="text-sm font-bold text-blue-700">₹{post.totalFare.toLocaleString('en-IN')}</span>
+            </div>
+          )}
+
           {post.description && (
             <p className="text-sm text-gray-700 mt-0.5 leading-relaxed line-clamp-3">
               {renderDescription(post.description)}

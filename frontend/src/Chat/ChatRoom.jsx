@@ -27,6 +27,7 @@ import React, {
 } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth }   from '../context/AuthContext';
+import CabTracker    from '../components/CabTracker';
 
 // ── Hashtag → accent color map ────────────────────────────────────────────────
 const HASHTAG_ACCENT = {
@@ -282,6 +283,15 @@ const ChatRoom = ({ postId, postTitle, hashtag, isAuthor = false, onClose, onRoo
 
           <div ref={bottomRef} />
         </div>
+
+        {/* ── CabSplit live tracker ─────────────────────────────────────── */}
+        {hashtag === '#cabsplit' && joined && (
+          <CabTracker
+            postId={postId}
+            isAuthor={isAuthor}
+            socket={socket}
+          />
+        )}
 
         {/* ── Input area ───────────────────────────────────────────────────── */}
         {roomClosed ? (

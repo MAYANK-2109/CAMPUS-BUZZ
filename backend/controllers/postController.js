@@ -71,7 +71,7 @@ exports.getPosts = async (req, res) => {
 // ── POST /api/posts ───────────────────────────────────────────────────────────
 exports.createPost = async (req, res) => {
   try {
-    const { title, description, imageUrl, hashtag, expiresAt, customTags } = req.body;
+    const { title, description, imageUrl, hashtag, expiresAt, customTags, totalFare } = req.body;
 
     // expiresAt is required for time-sensitive hashtags
     if (TIMED_HASHTAGS.has(hashtag)) {
@@ -115,6 +115,7 @@ exports.createPost = async (req, res) => {
       customTags: Array.isArray(customTags) ? customTags : [],
       expiresAt:  TIMED_HASHTAGS.has(hashtag) ? new Date(expiresAt) : null,
       mentions:   mentionIds,
+      totalFare:  hashtag === '#cabsplit' && totalFare ? Number(totalFare) : null,
     });
 
     // ── Fire mention notifications ────────────────────────────────────────────
@@ -181,7 +182,7 @@ exports.updatePost = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorised to update this post.' });
     }
 
-    const allowedFields = ['title', 'description', 'imageUrl', 'hashtag', 'expiresAt', 'customTags'];
+    const allowedFields = ['title', 'description', 'imageUrl', 'hashtag', 'expiresAt', 'customTags', 'totalFare'];
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) {
         post[field] = req.body[field];

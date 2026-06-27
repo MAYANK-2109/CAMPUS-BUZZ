@@ -10,6 +10,7 @@
  * Real-time via Socket.io:
  *   joinGlobalRoom / sendGlobalMsg / closeGlobalRoom / leaveGlobalRoom
  *   listens: globalJoined / globalMessage / globalRoomClosed / roomsUpdated
+ *            onlineUsersUpdate (new)
  */
 
 import React, {
@@ -17,7 +18,7 @@ import React, {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
-import { Search, Plus, SendHorizonal, X, Hash, Users, MessageSquare, FileText, ExternalLink } from 'lucide-react';
+import { Search, Plus, SendHorizonal, X, Hash, Users, MessageSquare, FileText, ExternalLink, ChevronRight, ChevronDown } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -84,6 +85,74 @@ const Avatar = ({ user, size = 38 }) => {
   );
 };
 
+// ── Online Users Panel ────────────────────────────────────────────────────────
+const OnlineUsersPanel = ({ users, currentUserId }) => {
+  const [expanded, setExpanded] = useState(false);
+  if (!users || users.length === 0) return null;
+
+  const bg = (name) => {
+    const colours = ['#5865f2','#57f287','#fee75c','#eb459e','#ed4245','#f0a500','#00b0f4'];
+    let h = 0;
+    for (let i = 0; i < (name?.length || 0); i++) h = (h * 31 + name.charCodeAt(i)) % colours.length;
+    return colours[h];
+  };
+
+  return (
+    <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '8px 14px', background: 'rgba(0,0,0,0.15)', flexShrink: 0 }}>
+      <button
+        onClick={() => setExpanded(v => !v)}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+      >
+        <Users size={13} color="#57f287" />
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#57f287', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Online — {users.length}
+        </span>
+        {expanded
+          ? <ChevronDown size={12} color="#57f287" style={{ marginLeft: 'auto' }} />
+          : <ChevronRight size={12} color="#57f287" style={{ marginLeft: 'auto' }} />}
+      </button>
+      <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+        {users.slice(0, expanded ? undefined : 6).map(u => (
+          <div key={u._id} title={u.displayName + (u._id === currentUserId ? ' (You)' : '')} style={{
+            width: 28, height: 28, borderRadius: '50%',
+            background: u.avatarUrl ? 'transparent' : bg(u.displayName),
+            border: u._id === currentUserId ? '2px solid #57f287' : '2px solid rgba(255,255,255,0.1)',
+            overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontWeight: 700, color: '#fff', position: 'relative',
+          }}>
+            {u.avatarUrl
+              ? <img src={u.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : u.displayName?.charAt(0)?.toUpperCase()}
+            <span style={{ position: 'absolute', bottom: 0, right: 0, width: 7, height: 7, borderRadius: '50%', background: '#57f287', border: '1.5px solid #1e2124' }} />
+          </div>
+        ))}
+        {!expanded && users.length > 6 && (
+          <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#2c2f33', border: '2px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#72767d' }}>
+            +{users.length - 6}
+          </div>
+        )}
+      </div>
+      {expanded && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {users.map(u => (
+            <div key={u._id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#57f287', flexShrink: 0, display: 'inline-block' }} />
+              <span style={{ fontSize: 12, color: u._id === currentUserId ? '#57f287' : '#dcddde', fontWeight: u._id === currentUserId ? 700 : 400 }}>
+                {u.displayName}{u._id === currentUserId ? ' (You)' : ''}
+              </span>
+              {u.role && u.role !== 'Student' && (
+                <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 20, background: roleBadgeStyle(u.role)?.background, color: roleBadgeStyle(u.role)?.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  {u.role}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ── Create Room Modal ─────────────────────────────────────────────────────────
 const CreateRoomModal = ({ onClose, onCreate }) => {
   const [name, setName] = useState('');
@@ -101,7 +170,7 @@ const CreateRoomModal = ({ onClose, onCreate }) => {
       const { data } = await api.post('/rooms', { name: name.trim(), hashtag });
       onCreate(data.data);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create room.');
+      setError(err.response?.data?.message || 'Failed to create room. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -114,7 +183,7 @@ const CreateRoomModal = ({ onClose, onCreate }) => {
         <form onSubmit={submit}>
           {error && (
             <div style={{ color: '#ed4245', fontSize: 13, marginBottom: 12, background: 'rgba(237,66,69,0.1)', padding: '8px 12px', borderRadius: 8 }}>
-              {error}
+              ⚠ {error}
             </div>
           )}
           <label className="ch-modal-label">Room Name</label>
@@ -168,6 +237,9 @@ const ChatHubPage = () => {
   const [sending, setSending] = useState(false);
   const [closingRoom, setClosingRoom] = useState(false);
   const [roomClosed, setRoomClosed] = useState(false);
+
+  // Online users in active global room
+  const [onlineUsers, setOnlineUsers] = useState([]);
 
   // System messages (join/leave/close notifications)
   const [sysMessages, setSysMessages] = useState([]);
@@ -230,12 +302,17 @@ const ChatHubPage = () => {
       }
     };
 
+    const onOnlineUsersUpdate = ({ roomId, users }) => {
+      if (roomId === activeRoomRef.current?._id) setOnlineUsers(users);
+    };
+
     socket.on('globalJoined', onGlobalJoined);
     socket.on('globalMessage', onGlobalMessage);
     socket.on('globalRoomClosed', onGlobalRoomClosed);
     socket.on('roomsUpdated', onRoomsUpdated);
     socket.on('globalUserJoined', onGlobalUserJoined);
     socket.on('globalUserLeft', onGlobalUserLeft);
+    socket.on('onlineUsersUpdate', onOnlineUsersUpdate);
 
     return () => {
       socket.off('globalJoined', onGlobalJoined);
@@ -244,6 +321,7 @@ const ChatHubPage = () => {
       socket.off('roomsUpdated', onRoomsUpdated);
       socket.off('globalUserJoined', onGlobalUserJoined);
       socket.off('globalUserLeft', onGlobalUserLeft);
+      socket.off('onlineUsersUpdate', onOnlineUsersUpdate);
     };
   }, [socket, fetchRooms]);
 
@@ -273,6 +351,7 @@ const ChatHubPage = () => {
     setSysMessages([]);
     setRoomClosed(false);
     setMsgText('');
+    setOnlineUsers([]);
     setLoadingMsgs(true);
 
     // Fetch history via REST (fast fallback before socket confirms)
@@ -327,10 +406,10 @@ const ChatHubPage = () => {
 
   // ── Room creation callback ────────────────────────────────────────────────────
   const handleRoomCreated = (newRoom) => {
-    setRooms(prev => [newRoom, ...prev]);
+    const tagged = { ...newRoom, _roomType: 'global' };
+    setRooms(prev => [tagged, ...prev]);
     setShowCreate(false);
-    handleSelectRoom(newRoom);
-    if (socket) socket.emit('roomsUpdated'); // notify others (optional)
+    setTimeout(() => handleSelectRoom(tagged), 100);
   };
 
   // ── Filtered rooms ────────────────────────────────────────────────────────────
@@ -491,6 +570,13 @@ const ChatHubPage = () => {
                 <span style={{ fontSize: 12, color: '#72767d', fontWeight: 400 }}>{activeRoom.hashtag}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Online count badge */}
+                {onlineUsers.length > 0 && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#57f287', fontWeight: 600 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#57f287', display: 'inline-block' }} />
+                    {onlineUsers.length} online
+                  </span>
+                )}
                 {activeRoom.createdBy && (
                   <span style={{ fontSize: 12, color: '#72767d' }}>
                     by{' '}
@@ -585,6 +671,9 @@ const ChatHubPage = () => {
               )}
               <div ref={messagesEndRef} />
             </div>
+
+            {/* Online Users Panel */}
+            <OnlineUsersPanel users={onlineUsers} currentUserId={user?._id} />
 
             {/* Input */}
             {!roomClosed && (

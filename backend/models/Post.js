@@ -74,6 +74,16 @@ const PostSchema = new mongoose.Schema(
     },
 
     /**
+     * totalFare: optional total cab fare amount (₹) for #cabsplit posts.
+     * Displayed on the post card to help riders decide if they want to share.
+     */
+    totalFare: {
+      type:    Number,
+      default: null,
+      min:     [0, 'Fare cannot be negative'],
+    },
+
+    /**
      * Soft-delete flag. The cron job sets isActive = false instead of
      * removing documents, preserving chat history integrity.
      */
