@@ -23,6 +23,9 @@ const { emitNotifications } = require('../socket');
 // ── Allowed time-sensitive hashtags that need an expiresAt ───────────────────
 const TIMED_HASHTAGS = new Set(['#foodsplit', '#cabsplit']);
 
+// ── Hashtags that automatically get a chat room ───────────────────────────────
+const CHAT_HASHTAGS = new Set(['#foodsplit', '#cabsplit', '#resell']);
+
 // ── Feed-ranking constants (tunable via env or query params) ──────────────────
 const DEFAULT_G = 0.8;   // gravity   – higher = popularity wins more
 const DEFAULT_H = 12;    // half-life – hours after which time-boost halves
@@ -172,7 +175,7 @@ exports.getPosts = async (req, res) => {
 // ── POST /api/posts ───────────────────────────────────────────────────────────
 exports.createPost = async (req, res) => {
   try {
-    const { title, description, imageUrl, hashtag, expiresAt, customTags, totalFare } = req.body;
+    let { title, description, imageUrl, hashtag, expiresAt, customTags, totalFare } = req.body;
 
     // Enforce that every post must have an image
     if (!imageUrl || !imageUrl.trim()) {
@@ -182,13 +185,8 @@ exports.createPost = async (req, res) => {
       });
     }
 
-    // Enforce that every post must have a hashtag
-    if (!hashtag || hashtag === 'None') {
-      return res.status(400).json({
-        success: false,
-        message: 'A hashtag is mandatory for every post.',
-      });
-    }
+    // If no primary hashtag provided, default to 'None'
+    hashtag = hashtag || 'None';
 
     // expiresAt is required for time-sensitive hashtags
     if (TIMED_HASHTAGS.has(hashtag)) {

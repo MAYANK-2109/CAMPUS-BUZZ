@@ -7,10 +7,11 @@ import { X, Image, Hash, Clock, AtSign } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../utils/api';
 
-const HASHTAGS = ['#foodsplit', '#cabsplit', '#resell', '#lost', '#found'];
+const HASHTAGS = ['None', '#foodsplit', '#cabsplit', '#resell', '#lost', '#found'];
 const TIMED    = new Set(['#foodsplit', '#cabsplit']);
 
 const HASHTAG_COLORS = {
+  'None':       'bg-gray-100 text-gray-800 border-gray-200',
   '#foodsplit': 'bg-orange-100 text-orange-800 border-orange-200',
   '#cabsplit':  'bg-blue-100 text-blue-800 border-blue-200',
   '#resell':    'bg-green-100 text-green-800 border-green-200',
@@ -97,7 +98,6 @@ const CreatePostForm = ({ onPostCreated, onClose, isClubOrAdmin = false }) => {
     e.preventDefault();
     setError('');
     if (!form.title.trim() || !form.description.trim()) return setError('Title & description are required.');
-    if (!form.hashtag) return setError('You must select a primary hashtag.');
     if (!form.imageUrl?.trim()) return setError('An image URL is required.');
     if (TIMED.has(form.hashtag) && !form.expiresAt) return setError(`Expiry time required for ${form.hashtag}.`);
 
@@ -107,7 +107,7 @@ const CreatePostForm = ({ onPostCreated, onClose, isClubOrAdmin = false }) => {
       const payload = {
         title: form.title.trim(),
         description: form.description.trim(),
-        hashtag: form.hashtag,
+        hashtag: form.hashtag || 'None',
         customTags,
         ...(form.imageUrl && { imageUrl: form.imageUrl.trim() }),
         ...(TIMED.has(form.hashtag) && { expiresAt: form.expiresAt }),

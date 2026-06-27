@@ -16,7 +16,7 @@
 const mongoose = require('mongoose');
 
 // ── Valid hashtag values ─────────────────────────────────────────────────────
-const HASHTAGS = ['#foodsplit', '#cabsplit', '#resell', '#lost', '#found'];
+const HASHTAGS = ['None', '#foodsplit', '#cabsplit', '#resell', '#lost', '#found'];
 
 const PostSchema = new mongoose.Schema(
   {
