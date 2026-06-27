@@ -14,7 +14,9 @@
  * club posts is enforced via the requireRole middleware on the route.
  */
 
-const Post = require('../models/Post');
+const Post         = require('../models/Post');
+const User         = require('../models/User');
+const Notification = require('../models/Notification');
 
 // ── Allowed time-sensitive hashtags that need an expiresAt ───────────────────
 const TIMED_HASHTAGS = new Set(['#foodsplit', '#cabsplit']);
@@ -45,7 +47,8 @@ exports.getPosts = async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('author', 'displayName role instituteEmail rollNo'),
+        .populate('author',   'displayName role instituteEmail rollNo avatarUrl')
+        .populate('mentions', 'displayName _id'),
       Post.countDocuments(filter),
     ]);
 
@@ -87,18 +90,50 @@ exports.createPost = async (req, res) => {
       }
     }
 
+    // ── Parse @mentions from description ─────────────────────────────────────
+    const mentionHandles = [];
+    if (description) {
+      const raw = description.match(/@([\w\s.]+?)(?=\s|$|[,!?.])/g) || [];
+      raw.forEach(m => mentionHandles.push(m.slice(1).trim()));
+    }
+
+    // Resolve @mention handles → user IDs by displayName (case-insensitive)
+    let mentionIds = [];
+    if (mentionHandles.length > 0) {
+      const mentionedUsers = await User.find({
+        displayName: { $in: mentionHandles.map(h => new RegExp(`^${h}$`, 'i')) },
+      }).select('_id');
+      mentionIds = mentionedUsers.map(u => u._id);
+    }
+
     const post = await Post.create({
       title,
       description,
-      imageUrl: imageUrl || null,
-      author:   req.user._id,
-      hashtag:  hashtag || 'None',
+      imageUrl:   imageUrl || null,
+      author:     req.user._id,
+      hashtag:    hashtag || 'None',
       customTags: Array.isArray(customTags) ? customTags : [],
-      expiresAt: TIMED_HASHTAGS.has(hashtag) ? new Date(expiresAt) : null,
+      expiresAt:  TIMED_HASHTAGS.has(hashtag) ? new Date(expiresAt) : null,
+      mentions:   mentionIds,
     });
 
-    // Populate author for the response
-    await post.populate('author', 'displayName role instituteEmail rollNo');
+    // ── Fire mention notifications ────────────────────────────────────────────
+    if (mentionIds.length > 0) {
+      const notifs = mentionIds
+        .filter(id => id.toString() !== req.user._id.toString()) // don't notify self
+        .map(id => ({
+          recipient: id,
+          sender:    req.user._id,
+          type:      'mention',
+          post:      post._id,
+          message:   `${req.user.displayName} mentioned you in a post.`,
+        }));
+      if (notifs.length > 0) await Notification.insertMany(notifs);
+    }
+
+    // Populate author + mentions for the response
+    await post.populate('author',   'displayName role instituteEmail rollNo avatarUrl');
+    await post.populate('mentions', 'displayName _id');
 
     return res.status(201).json({ success: true, data: post });
   } catch (err) {
@@ -115,7 +150,8 @@ exports.createPost = async (req, res) => {
 exports.getPostById = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id)
-      .populate('author', 'displayName role instituteEmail rollNo');
+      .populate('author',   'displayName role instituteEmail rollNo avatarUrl')
+      .populate('mentions', 'displayName _id');
 
     if (!post) {
       return res.status(404).json({ success: false, message: 'Post not found.' });

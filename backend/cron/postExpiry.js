@@ -17,9 +17,10 @@
  * (DB writes) must only occur through the cron schedule, not inline API code.
  */
 
-const cron     = require('node-cron');
-const Post     = require('../models/Post');
-const ChatRoom = require('../models/ChatRoom');
+const cron         = require('node-cron');
+const Post         = require('../models/Post');
+const ChatRoom     = require('../models/ChatRoom');
+const Announcement = require('../models/Announcement');
 
 // ── Hashtags whose posts are subject to time-based expiry ────────────────────
 const EXPIRY_HASHTAGS = ['#foodsplit', '#cabsplit'];
@@ -69,6 +70,42 @@ const expireOldPosts = async () => {
 };
 
 /**
+ * closeIdleGlobalRooms
+ * ─────────────────────
+ * Auto-closes global hub rooms that have had no message activity for 2 hours.
+ * Uses lastMessageAt as the activity indicator.
+ *
+ * @returns {{ closedRooms: number }}
+ */
+const closeIdleGlobalRooms = async () => {
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+
+  const result = await ChatRoom.updateMany(
+    {
+      isGlobal:  true,
+      isActive:  true,
+      lastMessageAt: { $lt: twoHoursAgo },
+    },
+    { $set: { isActive: false } }
+  );
+
+  return { closedRooms: result.modifiedCount };
+};
+
+/**
+ * expireAnnouncements
+ * ───────────────────
+ * Soft-deletes announcements whose expiresAt has passed.
+ */
+const expireAnnouncements = async () => {
+  const result = await Announcement.updateMany(
+    { isActive: true, expiresAt: { $lt: new Date() } },
+    { $set: { isActive: false } }
+  );
+  return { expiredAnnouncements: result.modifiedCount };
+};
+
+/**
  * startPostExpiryCron
  * ───────────────────
  * Registers the cron schedule. Called once from server.js after the DB
@@ -77,29 +114,32 @@ const expireOldPosts = async () => {
  * Schedule: every 5 minutes  →  '* /5 * * * *'
  */
 const startPostExpiryCron = () => {
-  // node-cron expression: second(opt) minute hour day-of-month month day-of-week
-  // '*/5 * * * *'  = at every 5th minute
   cron.schedule('*/5 * * * *', async () => {
-    console.log(`[CRON] postExpiry job triggered at ${new Date().toISOString()}`);
+    console.log(`[CRON] Maintenance job triggered at ${new Date().toISOString()}`);
 
     try {
       const { deactivatedPosts, deactivatedRooms } = await expireOldPosts();
-
       if (deactivatedPosts > 0) {
-        console.log(
-          `[CRON] postExpiry: deactivated ${deactivatedPosts} post(s), ` +
-          `${deactivatedRooms} chat room(s).`
-        );
+        console.log(`[CRON] postExpiry: deactivated ${deactivatedPosts} post(s), ${deactivatedRooms} chat room(s).`);
       } else {
         console.log('[CRON] postExpiry: no expired posts found.');
       }
+
+      const { closedRooms } = await closeIdleGlobalRooms();
+      if (closedRooms > 0) {
+        console.log(`[CRON] globalRooms: closed ${closedRooms} idle room(s) (2hr inactivity).`);
+      }
+
+      const { expiredAnnouncements } = await expireAnnouncements();
+      if (expiredAnnouncements > 0) {
+        console.log(`[CRON] announcements: expired ${expiredAnnouncements} announcement(s).`);
+      }
     } catch (err) {
-      // Log the error but do NOT rethrow – a cron failure must never crash the server
-      console.error('[CRON] postExpiry job failed:', err.message, err.stack);
+      console.error('[CRON] Maintenance job failed:', err.message, err.stack);
     }
   });
 
   console.log('[CRON] Post expiry job scheduled (every 5 minutes).');
 };
 
-module.exports = { startPostExpiryCron, expireOldPosts };
+module.exports = { startPostExpiryCron, expireOldPosts, closeIdleGlobalRooms, expireAnnouncements };

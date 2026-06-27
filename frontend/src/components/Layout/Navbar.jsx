@@ -12,7 +12,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Home, Megaphone, Calendar, ShieldAlert,
-  Bell, LogOut, User, ChevronUp,
+  Bell, LogOut, User, ChevronUp, MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { label: 'Club Feed',  to: '/club',       Icon: Megaphone },
   { label: 'Calendar',   to: '/calendar',   Icon: Calendar },
   { label: 'Complaints', to: '/complaints', Icon: ShieldAlert },
+  { label: 'Chat',       to: '/chat',       Icon: MessageSquare },
 ];
 
 const Navbar = () => {

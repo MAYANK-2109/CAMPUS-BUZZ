@@ -9,10 +9,11 @@ const NotificationSchema = new mongoose.Schema(
     sender:    { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     type: {
       type:    String,
-      enum:    ['like', 'dislike', 'comment', 'new_post', 'follow'],
+      enum:    ['like', 'dislike', 'comment', 'new_post', 'follow', 'mention', 'announcement'],
       required: true,
     },
-    post:    { type: mongoose.Schema.Types.ObjectId, ref: 'Post', default: null },
+    post:         { type: mongoose.Schema.Types.ObjectId, ref: 'Post',         default: null },
+    announcement: { type: mongoose.Schema.Types.ObjectId, ref: 'Announcement', default: null },
     isRead:  { type: Boolean, default: false },
     message: { type: String, trim: true },
   },

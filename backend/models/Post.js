@@ -82,6 +82,11 @@ const PostSchema = new mongoose.Schema(
       default: true,
       index:   true,   // Frequently queried in feed + cron job
     },
+
+    /** Users @mentioned in the post description */
+    mentions: [
+      { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    ],
   },
   {
     timestamps: true,

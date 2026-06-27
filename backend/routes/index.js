@@ -43,6 +43,11 @@ const interactionController   = require('../controllers/interactionController');
 const notificationController  = require('../controllers/notificationController');
 const userRoutes              = require('./userRoutes');
 
+// ── Model imports for inline route handlers ────────────────────────────────────
+const User         = require('../models/User');
+const Announcement = require('../models/Announcement');
+const Notification = require('../models/Notification');
+
 // ════════════════════════════════════════════════════════════════════════════════
 // AUTH routes  (/api/auth/…)  — registration and login are public
 // ════════════════════════════════════════════════════════════════════════════════
@@ -111,7 +116,6 @@ router.patch('/complaints/:id', protect, adminOnly, complaintController.updateCo
 // ════════════════════════════════════════════════════════════════════════════════
 // CLUBS route  (/api/clubs)  – list all Club/Admin accounts for search & follow
 // ════════════════════════════════════════════════════════════════════════════════
-const User = require('../models/User');
 router.get('/clubs', protect, async (req, res) => {
   try {
     const clubs = await User.find({ role: { $in: ['Club', 'Admin'] } })
@@ -125,21 +129,17 @@ router.get('/clubs', protect, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
-// CHAT ROOM routes  (/api/chat-rooms/…)
+// CHAT ROOM routes  (/api/chat-rooms/…  and  /api/rooms/…)
 // ════════════════════════════════════════════════════════════════════════════════
-/**
- * PATCH /api/chat-rooms/:postId/close
- *   Closes the chat room for a post. Only the post author or an Admin can call this.
- *   The room is deactivated (isActive = false); the post itself is NOT deleted.
- */
 const ChatRoom = require('../models/ChatRoom');
+const Message  = require('../models/Message');
+
+// ── Legacy: close a post-linked room ─────────────────────────────────────────
 router.patch('/chat-rooms/:postId/close', protect, async (req, res) => {
   try {
     const Post = require('../models/Post');
     const post = await Post.findById(req.params.postId);
-    if (!post) {
-      return res.status(404).json({ success: false, message: 'Post not found.' });
-    }
+    if (!post) return res.status(404).json({ success: false, message: 'Post not found.' });
 
     const isAuthor = post.author.toString() === req.user._id.toString();
     if (!isAuthor && req.user.role !== 'Admin') {
@@ -147,20 +147,125 @@ router.patch('/chat-rooms/:postId/close', protect, async (req, res) => {
     }
 
     const room = await ChatRoom.findOne({ postId: req.params.postId });
-    if (!room) {
-      return res.status(404).json({ success: false, message: 'Chat room not found.' });
-    }
-    if (!room.isActive) {
-      return res.status(400).json({ success: false, message: 'Room is already closed.' });
-    }
+    if (!room)          return res.status(404).json({ success: false, message: 'Chat room not found.' });
+    if (!room.isActive) return res.status(400).json({ success: false, message: 'Room is already closed.' });
 
     room.isActive = false;
     await room.save();
-
     return res.status(200).json({ success: true, message: 'Chat room closed.' });
   } catch (err) {
     console.error('[chat-rooms/close]', err);
     return res.status(500).json({ success: false, message: 'Failed to close chat room.' });
+  }
+});
+
+// ── GET /api/rooms — list all active rooms (global + post-linked) ─────────────
+router.get('/rooms', protect, async (req, res) => {
+  try {
+    // 1. Global hub rooms
+    const globalRooms = await ChatRoom.find({ isGlobal: true, isActive: true })
+      .populate('createdBy', 'displayName avatarUrl role')
+      .sort({ lastMessageAt: -1, createdAt: -1 })
+      .lean();
+
+    // 2. Post-linked chat rooms (active posts with a chat hashtag)
+    const postRooms = await ChatRoom.find({ isGlobal: false, isActive: true, postId: { $ne: null } })
+      .populate('createdBy', 'displayName avatarUrl role')
+      .populate('postId', 'title hashtag author')
+      .sort({ lastMessageAt: -1, createdAt: -1 })
+      .lean();
+
+    // Normalise post-linked rooms so the frontend can tell them apart
+    const normalisedPostRooms = postRooms
+      .filter(r => r.postId) // guard against orphaned rooms
+      .map(r => ({
+        ...r,
+        _roomType: 'post',
+        name:    r.postId.title,
+        hashtag: r.postId.hashtag || '#resell',
+      }));
+
+    // Attach a tag so the frontend knows these are global
+    const normalisedGlobalRooms = globalRooms.map(r => ({ ...r, _roomType: 'global' }));
+
+    return res.json({ success: true, data: [...normalisedGlobalRooms, ...normalisedPostRooms] });
+  } catch (err) {
+    console.error('[GET /rooms]', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch rooms.' });
+  }
+});
+
+// ── GET /api/rooms/hashtags — list allowed hashtag slugs ─────────────────────
+router.get('/rooms/hashtags', protect, (_req, res) => {
+  return res.json({ success: true, data: ChatRoom.allowedHashtags || [] });
+});
+
+// ── POST /api/rooms — create a new global room ───────────────────────────────
+router.post('/rooms', protect, async (req, res) => {
+  try {
+    const { name, hashtag } = req.body;
+    if (!name?.trim()) {
+      return res.status(400).json({ success: false, message: 'Room name is required.' });
+    }
+    const slug = hashtag?.trim() || '#general';
+
+    const room = await ChatRoom.create({
+      isGlobal:      true,
+      name:          name.trim(),
+      hashtag:       slug,
+      createdBy:     req.user._id,
+      isActive:      true,
+      lastMessageAt: new Date(),
+    });
+
+    await room.populate('createdBy', 'displayName avatarUrl role');
+    return res.status(201).json({ success: true, data: room });
+  } catch (err) {
+    console.error('[POST /rooms]', err);
+    return res.status(500).json({ success: false, message: 'Failed to create room.' });
+  }
+});
+
+// ── DELETE /api/rooms/:id — close a global room ──────────────────────────────
+router.delete('/rooms/:id', protect, async (req, res) => {
+  try {
+    const room = await ChatRoom.findById(req.params.id);
+    if (!room || !room.isGlobal) {
+      return res.status(404).json({ success: false, message: 'Room not found.' });
+    }
+
+    const isCreator = room.createdBy?.toString() === req.user._id.toString();
+    if (!isCreator && req.user.role !== 'Admin') {
+      return res.status(403).json({ success: false, message: 'Only the room creator can close this room.' });
+    }
+
+    room.isActive = false;
+    await room.save();
+    return res.json({ success: true, message: 'Room closed.' });
+  } catch (err) {
+    console.error('[DELETE /rooms/:id]', err);
+    return res.status(500).json({ success: false, message: 'Failed to close room.' });
+  }
+});
+
+// ── GET /api/rooms/:id/messages — fetch last 60 messages ─────────────────────
+router.get('/rooms/:id/messages', protect, async (req, res) => {
+  try {
+    const room = await ChatRoom.findById(req.params.id);
+    if (!room || !room.isGlobal) {
+      return res.status(404).json({ success: false, message: 'Room not found.' });
+    }
+
+    const messages = await Message.find({ roomId: room._id })
+      .sort({ timestamp: -1 })
+      .limit(60)
+      .populate('senderId', 'displayName avatarUrl role')
+      .lean();
+
+    return res.json({ success: true, data: messages.reverse() });
+  } catch (err) {
+    console.error('[GET /rooms/:id/messages]', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch messages.' });
   }
 });
 
@@ -169,6 +274,22 @@ router.patch('/chat-rooms/:postId/close', protect, async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════════
 // NOTE: /users/me/* routes must be registered BEFORE router.use('/users', userRoutes)
 // so that 'me' is not matched as a MongoDB ObjectId by the /:id param.
+// ── GET /api/users/search — autocomplete for @mentions ───────────────────────────
+// NOTE: must be before router.use('/users', userRoutes) to avoid :id match
+router.get('/users/search', protect, async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q || q.length < 1) return res.json({ success: true, data: [] });
+    const users = await User.find({
+      displayName: { $regex: q, $options: 'i' },
+    }).select('_id displayName avatarUrl role').limit(8).lean();
+    return res.json({ success: true, data: users });
+  } catch (err) {
+    console.error('[GET /users/search]', err);
+    return res.status(500).json({ success: false, data: [] });
+  }
+});
+
 router.get('/users/me/saved', protect, interactionController.getSavedPosts);
 
 router.use('/users', userRoutes);
@@ -179,5 +300,102 @@ router.use('/users', userRoutes);
 router.get('/notifications',             protect, notificationController.getNotifications);
 router.get('/notifications/unread-count',protect, notificationController.getUnreadCount);
 router.patch('/notifications/read',      protect, notificationController.markAllRead);
+
+// ════════════════════════════════════════════════════════════════════════════════
+// ANNOUNCEMENT routes  (/api/announcements/…)
+// ════════════════════════════════════════════════════════════════════════════════
+
+// GET /api/announcements — active announcements from followed clubs + own
+router.get('/announcements', protect, async (req, res) => {
+  try {
+    const me = await User.findById(req.user._id).select('following role').lean();
+    const authorIds = [...(me.following || []), req.user._id];
+
+    const announcements = await Announcement.find({
+      isActive:  true,
+      expiresAt: { $gt: new Date() },
+      author:    { $in: authorIds },
+    })
+      .populate('author', 'displayName avatarUrl role')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json({ success: true, data: announcements });
+  } catch (err) {
+    console.error('[GET /announcements]', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch announcements.' });
+  }
+});
+
+// POST /api/announcements — create (Club/Admin only)
+router.post('/announcements', protect, clubOrAdmin, async (req, res) => {
+  try {
+    const { text, imageUrl, durationHours } = req.body;
+    const hours = Math.min(48, Math.max(1, parseInt(durationHours) || 24));
+
+    if (!text?.trim() && !imageUrl?.trim()) {
+      return res.status(400).json({ success: false, message: 'Announcement must have text or an image.' });
+    }
+
+    const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
+
+    const announcement = await Announcement.create({
+      author:        req.user._id,
+      text:          text?.trim() || '',
+      imageUrl:      imageUrl?.trim() || null,
+      durationHours: hours,
+      expiresAt,
+    });
+    await announcement.populate('author', 'displayName avatarUrl role');
+
+    // Fire notifications to all followers
+    const author = await User.findById(req.user._id).select('followers displayName').lean();
+    if (author.followers?.length > 0) {
+      const notifs = author.followers.map(followerId => ({
+        recipient:    followerId,
+        sender:       req.user._id,
+        type:         'announcement',
+        announcement: announcement._id,
+        message:      `${author.displayName} posted a new announcement.`,
+      }));
+      await Notification.insertMany(notifs);
+    }
+
+    return res.status(201).json({ success: true, data: announcement });
+  } catch (err) {
+    console.error('[POST /announcements]', err);
+    return res.status(500).json({ success: false, message: 'Failed to create announcement.' });
+  }
+});
+
+// DELETE /api/announcements/:id — soft-delete own announcement
+router.delete('/announcements/:id', protect, async (req, res) => {
+  try {
+    const ann = await Announcement.findById(req.params.id);
+    if (!ann) return res.status(404).json({ success: false, message: 'Announcement not found.' });
+    if (ann.author.toString() !== req.user._id.toString() && req.user.role !== 'Admin') {
+      return res.status(403).json({ success: false, message: 'Not authorised.' });
+    }
+    ann.isActive = false;
+    await ann.save();
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[DELETE /announcements/:id]', err);
+    return res.status(500).json({ success: false, message: 'Failed to delete.' });
+  }
+});
+
+// POST /api/announcements/:id/seen — mark as seen
+router.post('/announcements/:id/seen', protect, async (req, res) => {
+  try {
+    await Announcement.updateOne(
+      { _id: req.params.id },
+      { $addToSet: { seenBy: req.user._id } }
+    );
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false });
+  }
+});
 
 module.exports = router;

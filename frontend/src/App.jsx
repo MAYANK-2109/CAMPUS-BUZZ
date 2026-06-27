@@ -27,6 +27,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import ProfilePage        from './pages/ProfilePage';
 import UserProfilePage    from './pages/UserProfilePage';
 import NotificationsPage  from './pages/NotificationsPage';
+import ChatHubPage        from './pages/ChatHubPage';
 
 /**
  * AuthLayout: wraps protected pages in the full 3-column shell.
@@ -34,21 +35,27 @@ import NotificationsPage  from './pages/NotificationsPage';
  * - Right panel is hidden on <lg screens via CSS.
  * - The `withRightPanel` prop controls whether the right panel is shown
  *   (only on Feed/Club pages where it makes sense).
+ * - The `fullBleed` prop skips the cb-feed-col wrapper for pages that manage
+ *   their own layout (e.g. ChatHubPage).
  */
-const AuthLayout = ({ children, withRightPanel = false }) => (
+const AuthLayout = ({ children, withRightPanel = false, fullBleed = false }) => (
   <div className="cb-app-shell">
     <Navbar />
     <main className={`cb-main ${withRightPanel ? 'cb-main--with-rp' : ''}`}>
-      <div className="cb-feed-col">
-        {children}
-      </div>
+      {fullBleed ? (
+        children
+      ) : (
+        <div className="cb-feed-col">
+          {children}
+        </div>
+      )}
       {withRightPanel && <RightPanel />}
     </main>
   </div>
 );
 
 const App = () => (
-  <BrowserRouter>
+  <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
     <AuthProvider>
       <SocketProvider>
         <Routes>
@@ -130,6 +137,17 @@ const App = () => (
               <ProtectedRoute>
                 <AuthLayout>
                   <NotificationsPage />
+                </AuthLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/chat"
+            element={
+              <ProtectedRoute>
+                <AuthLayout fullBleed>
+                  <ChatHubPage />
                 </AuthLayout>
               </ProtectedRoute>
             }

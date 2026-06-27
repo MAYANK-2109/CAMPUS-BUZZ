@@ -2,8 +2,9 @@
  * src/components/Feed/CreatePostForm.jsx
  */
 
-import React, { useState } from 'react';
-import { X, Image, Hash, Clock } from 'lucide-react';
+import React, { useState, useRef, useCallback } from 'react';
+import { X, Image, Hash, Clock, AtSign } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import api from '../utils/api';
 
 const HASHTAGS = ['None', '#foodsplit', '#cabsplit', '#resell', '#lost', '#found'];
@@ -23,7 +24,64 @@ const CreatePostForm = ({ onPostCreated, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
 
+  // @mention autocomplete
+  const [mentionQuery, setMentionQuery]     = useState('');
+  const [mentionResults, setMentionResults] = useState([]);
+  const [showMentions, setShowMentions]     = useState(false);
+  const mentionTimer = useRef(null);
+  const descRef      = useRef(null);
+
   const handleChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
+
+  // Detect @mention trigger in description
+  const handleDescriptionChange = (e) => {
+    const val = e.target.value;
+    setForm(p => ({ ...p, description: val }));
+
+    // Find if we're currently typing a @mention
+    const cursor = e.target.selectionStart;
+    const textBefore = val.slice(0, cursor);
+    const mentionMatch = textBefore.match(/@([\w.]*)$/);
+
+    if (mentionMatch) {
+      const query = mentionMatch[1];
+      setMentionQuery(query);
+      clearTimeout(mentionTimer.current);
+      mentionTimer.current = setTimeout(async () => {
+        if (query.length >= 1) {
+          try {
+            const { data } = await api.get(`/users/search?q=${encodeURIComponent(query)}`);
+            setMentionResults(data.data || []);
+            setShowMentions(true);
+          } catch { setShowMentions(false); }
+        } else {
+          setMentionResults([]);
+          setShowMentions(false);
+        }
+      }, 200);
+    } else {
+      setShowMentions(false);
+      setMentionResults([]);
+    }
+  };
+
+  // Insert selected mention into description
+  const insertMention = useCallback((user) => {
+    const textarea = descRef.current;
+    if (!textarea) return;
+    const val = textarea.value;
+    const cursor = textarea.selectionStart;
+    const textBefore = val.slice(0, cursor);
+    const replaced = textBefore.replace(/@[\w.]*$/, `@${user.displayName} `);
+    const newVal = replaced + val.slice(cursor);
+    setForm(p => ({ ...p, description: newVal }));
+    setShowMentions(false);
+    setMentionResults([]);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(replaced.length, replaced.length);
+    }, 0);
+  }, []);
 
   const handleSubmit = async e => {
     e.preventDefault();
@@ -91,17 +149,44 @@ const CreatePostForm = ({ onPostCreated, onClose }) => {
             required
           />
 
-          {/* Description */}
-          <textarea
-            className="w-full text-sm text-gray-700 placeholder-gray-400 border-0 outline-none resize-none bg-transparent leading-relaxed"
-            name="description"
-            value={form.description}
-            onChange={handleChange}
-            placeholder="Write a caption…"
-            rows={4}
-            maxLength={2000}
-            required
-          />
+          {/* Description with @mention autocomplete */}
+          <div className="relative">
+            <textarea
+              ref={descRef}
+              className="w-full text-sm text-gray-700 placeholder-gray-400 border-0 outline-none resize-none bg-transparent leading-relaxed"
+              name="description"
+              value={form.description}
+              onChange={handleDescriptionChange}
+              placeholder="Write a caption… use @Name to mention someone"
+              rows={4}
+              maxLength={2000}
+              required
+            />
+            {/* Mention autocomplete dropdown */}
+            {showMentions && mentionResults.length > 0 && (
+              <div className="absolute left-0 right-0 z-50 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden mt-1">
+                {mentionResults.map(u => (
+                  <button
+                    key={u._id}
+                    type="button"
+                    onMouseDown={() => insertMention(u)}
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 transition-colors text-left"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      {u.avatarUrl
+                        ? <img src={u.avatarUrl} alt="" className="w-full h-full object-cover" />
+                        : <span className="text-xs font-bold text-indigo-600">{u.displayName?.charAt(0)?.toUpperCase()}</span>
+                      }
+                    </div>
+                    <div>
+                      <span className="text-sm font-semibold text-gray-900">{u.displayName}</span>
+                      <span className="text-xs text-gray-400 ml-1.5">{u.role}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="border-t border-gray-100 pt-4 space-y-3">
             {/* Image URL */}

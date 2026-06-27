@@ -4,10 +4,10 @@
  * Instagram-inspired post card with likes, dislikes, comments, hashtag actions.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router-dom';
-import { Heart, ThumbsDown, MessageCircle, Trash2, Bookmark, Share2 } from 'lucide-react';
+import { Heart, ThumbsDown, MessageCircle, Trash2, Bookmark, Share2, MoreHorizontal } from 'lucide-react';
 import HashtagBadge   from './HashtagBadge';
 import CountdownTimer from './CountdownTimer';
 import ContactModal   from './ContactModal';
@@ -34,6 +34,15 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
   const [isSaved,      setIsSaved]      = useState(false);
   const [saving,       setSaving]       = useState(false);
   const [shareToast,   setShareToast]   = useState(false);
+  const [showMenu,     setShowMenu]     = useState(false);
+  const menuRef = useRef(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const userId      = user?._id;
   const isAuthor    = userId === post.author?._id;
@@ -93,6 +102,26 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
   const handleHashtagAction = () => {
     if (CHAT_HASHTAGS.has(post.hashtag)) setShowChat(true);
     else if (CONTACT_HASHTAGS.has(post.hashtag)) setShowContact(true);
+  };
+
+  // ── Render description with @mention links ───────────────────────────────
+  const renderDescription = (text) => {
+    if (!text) return null;
+    const mentionMap = {};
+    (post.mentions || []).forEach(m => {
+      if (m?.displayName) mentionMap[m.displayName.toLowerCase()] = m._id;
+    });
+    const parts = text.split(/(@[\S]+)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('@')) {
+        const handle = part.slice(1);
+        const uid = mentionMap[handle.toLowerCase()];
+        if (uid) {
+          return <Link key={i} to={`/profile/${uid}`} className="text-indigo-600 font-medium hover:underline">{part}</Link>;
+        }
+      }
+      return <span key={i}>{part}</span>;
+    });
   };
 
   // ── Save (bookmark) ────────────────────────────────────────────────────
@@ -197,18 +226,30 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
             </div>
           </div>
 
-          {/* Options */}
-          <div className="flex items-center gap-1">
-            {!hideDelete && (isAuthor || isAdmin) && (
+          {/* Options — 3-dot context menu */}
+          {!hideDelete && (isAuthor || isAdmin) && (
+            <div className="relative" ref={menuRef}>
               <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="p-1.5 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                onClick={() => setShowMenu(v => !v)}
+                className="p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                title="More options"
               >
-                {deleting ? <div className="w-4 h-4 border-2 border-gray-300 border-t-red-400 rounded-full animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                <MoreHorizontal className="w-5 h-5" />
               </button>
-            )}
-          </div>
+              {showMenu && (
+                <div className="absolute right-0 top-8 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[140px] animate-[fadeIn_0.1s_ease_forwards]">
+                  <button
+                    onClick={() => { setShowMenu(false); handleDelete(); }}
+                    disabled={deleting}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors font-medium"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    {deleting ? 'Deleting…' : 'Delete Post'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── Image ─────────────────────────────────────────────────────────── */}
@@ -348,7 +389,7 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
           </p>
           {post.description && (
             <p className="text-sm text-gray-700 mt-0.5 leading-relaxed line-clamp-3">
-              {post.description}
+              {renderDescription(post.description)}
             </p>
           )}
 

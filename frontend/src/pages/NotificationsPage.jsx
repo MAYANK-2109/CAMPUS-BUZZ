@@ -4,15 +4,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Heart, MessageCircle, ThumbsDown, UserPlus, Bell } from 'lucide-react';
+import { Heart, MessageCircle, ThumbsDown, UserPlus, Bell, AtSign, Megaphone } from 'lucide-react';
 import api from '../utils/api';
 
 const TYPE_ICON = {
-  like:     { Icon: Heart,          bg: 'bg-rose-100',   text: 'text-rose-500' },
-  dislike:  { Icon: ThumbsDown,     bg: 'bg-orange-100', text: 'text-orange-500' },
-  comment:  { Icon: MessageCircle,  bg: 'bg-blue-100',   text: 'text-blue-500' },
-  new_post: { Icon: Bell,           bg: 'bg-purple-100', text: 'text-purple-500' },
-  follow:   { Icon: UserPlus,       bg: 'bg-green-100',  text: 'text-green-500' },
+  like:         { Icon: Heart,          bg: 'bg-rose-100',   text: 'text-rose-500' },
+  dislike:      { Icon: ThumbsDown,     bg: 'bg-orange-100', text: 'text-orange-500' },
+  comment:      { Icon: MessageCircle,  bg: 'bg-blue-100',   text: 'text-blue-500' },
+  new_post:     { Icon: Bell,           bg: 'bg-purple-100', text: 'text-purple-500' },
+  follow:       { Icon: UserPlus,       bg: 'bg-green-100',  text: 'text-green-500' },
+  mention:      { Icon: AtSign,         bg: 'bg-indigo-100', text: 'text-indigo-500' },
+  announcement: { Icon: Megaphone,      bg: 'bg-yellow-100', text: 'text-yellow-600' },
 };
 
 const NotificationsPage = () => {

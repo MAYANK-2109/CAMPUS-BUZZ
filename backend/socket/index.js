@@ -1,26 +1,21 @@
 /**
  * socket/index.js
  * ─────────────────────────────────────────────────────────────────────────────
- * Socket.io server – real-time chat for post rooms.
+ * Socket.io server — handles BOTH:
+ *   1. Post-linked rooms (foodsplit, cabsplit, resell) — unchanged
+ *   2. Global chat hub rooms — new
  *
- * Room naming convention: each post gets its own room named by its _id string.
- * Users join a room via `joinRoom`, send messages via `sendMessage`.
+ * Global room events (Client → Server):
+ *   joinGlobalRoom   { roomId }
+ *   sendGlobalMsg    { roomId, text }
+ *   leaveGlobalRoom  { roomId }
+ *   closeGlobalRoom  { roomId }
  *
- * Auth: On connection the client passes the JWT as a handshake query param
- * `?token=<jwt>` or in `auth.token`. The socket middleware verifies it before
- * allowing the connection.
- *
- * Events:
- *   Client → Server:
- *     joinRoom    { postId }
- *     sendMessage { postId, text }
- *     disconnect  (built-in)
- *
- *   Server → Client:
- *     joinedRoom  { roomId, history: Message[] }
- *     newMessage  { _id, roomId, senderId, text, timestamp, senderName }
- *     roomError   { message }
- *     userJoined  { userId, displayName }
+ * Global room events (Server → Client):
+ *   globalJoined     { roomId, history, room }
+ *   globalMessage    { _id, roomId, senderId, senderName, senderAvatar, senderRole, text, timestamp }
+ *   globalRoomClosed { roomId, closedBy }
+ *   roomsUpdated     (broadcast — triggers clients to re-fetch room list)
  */
 
 const { Server }  = require('socket.io');
@@ -30,22 +25,12 @@ const Post        = require('../models/Post');
 const ChatRoom    = require('../models/ChatRoom');
 const Message     = require('../models/Message');
 
-/**
- * initSocket
- * ──────────
- * Attaches a Socket.io Server to the existing http.Server instance.
- * Called once from server.js.
- *
- * @param {http.Server} httpServer  The Node HTTP server.
- * @returns {Server}                The Socket.io server instance.
- */
 const initSocket = (httpServer) => {
   const io = new Server(httpServer, {
     cors: {
       origin:      process.env.CLIENT_URL || 'http://localhost:3000',
       credentials: true,
     },
-    // Ping timeout / interval – tune for campus network conditions
     pingTimeout:  60000,
     pingInterval: 25000,
   });
@@ -53,23 +38,16 @@ const initSocket = (httpServer) => {
   // ── Socket Authentication Middleware ────────────────────────────────────────
   io.use(async (socket, next) => {
     try {
-      // Token can arrive either via handshake.auth or as a query param
       const token =
         socket.handshake.auth?.token ||
         socket.handshake.query?.token;
 
-      if (!token) {
-        return next(new Error('Authentication error: no token provided.'));
-      }
+      if (!token) return next(new Error('Authentication error: no token provided.'));
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const user    = await User.findById(decoded.id).select('-passwordHash');
+      if (!user)    return next(new Error('Authentication error: user not found.'));
 
-      if (!user) {
-        return next(new Error('Authentication error: user not found.'));
-      }
-
-      // Attach user to the socket for downstream handlers
       socket.user = user;
       next();
     } catch (err) {
@@ -79,102 +57,65 @@ const initSocket = (httpServer) => {
 
   // ── Connection handler ──────────────────────────────────────────────────────
   io.on('connection', (socket) => {
-    console.log(
-      `[Socket] Connected: user=${socket.user.displayName} (${socket.user._id}), ` +
-      `socketId=${socket.id}`
-    );
+    console.log(`[Socket] Connected: ${socket.user.displayName} (${socket.user._id}) socketId=${socket.id}`);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  POST-LINKED ROOM EVENTS  (existing — unchanged)
+    // ═══════════════════════════════════════════════════════════════════════════
 
     // ── joinRoom ──────────────────────────────────────────────────────────────
     socket.on('joinRoom', async ({ postId }) => {
       try {
-        if (!postId) {
-          return socket.emit('roomError', { message: 'postId is required to join a room.' });
-        }
+        if (!postId) return socket.emit('roomError', { message: 'postId is required to join a room.' });
 
-        // Verify the post exists and is active
         const post = await Post.findById(postId);
-        if (!post) {
-          return socket.emit('roomError', { message: 'Post not found.' });
-        }
-        if (!post.isActive) {
-          return socket.emit('roomError', { message: 'This post has expired.' });
-        }
+        if (!post)          return socket.emit('roomError', { message: 'Post not found.' });
+        if (!post.isActive) return socket.emit('roomError', { message: 'This post has expired.' });
 
-        // Only posts with chat-enabled hashtags can have rooms
         const CHAT_HASHTAGS = new Set(['#foodsplit', '#cabsplit', '#resell']);
         if (!CHAT_HASHTAGS.has(post.hashtag)) {
           return socket.emit('roomError', { message: 'This post type does not support chat.' });
         }
 
-        // Find or create the ChatRoom document
         const room = await ChatRoom.findOrCreate(postId);
-        if (!room.isActive) {
-          return socket.emit('roomError', { message: 'This chat room is no longer active.' });
-        }
+        if (!room.isActive) return socket.emit('roomError', { message: 'This chat room is no longer active.' });
 
-        // Add user to participants (using $addToSet to avoid duplicates)
         await ChatRoom.updateOne(
           { _id: room._id },
           { $addToSet: { participants: socket.user._id } }
         );
 
-        // Join the socket.io room (named by postId string)
         socket.join(postId);
-        socket.currentRoom = postId; // Track for disconnect cleanup
+        socket.currentRoom = postId;
 
-        // Fetch last 50 messages for the room (sent as history to the joiner only)
         const history = await Message.find({ roomId: room._id })
           .sort({ timestamp: -1 })
           .limit(50)
           .populate('senderId', 'displayName role')
           .lean();
 
-        // Emit history to the connecting user only
-        socket.emit('joinedRoom', {
-          roomId:  postId,
-          history: history.reverse(), // chronological order
-        });
+        socket.emit('joinedRoom', { roomId: postId, history: history.reverse() });
+        socket.to(postId).emit('userJoined', { userId: socket.user._id, displayName: socket.user.displayName });
 
-        // Notify others in the room
-        socket.to(postId).emit('userJoined', {
-          userId:      socket.user._id,
-          displayName: socket.user.displayName,
-        });
-
-        console.log(
-          `[Socket] ${socket.user.displayName} joined room ${postId}`
-        );
+        console.log(`[Socket] ${socket.user.displayName} joined post-room ${postId}`);
       } catch (err) {
         console.error('[Socket joinRoom error]', err);
-        socket.emit('roomError', { message: 'Failed to join room. Please try again.' });
+        socket.emit('roomError', { message: 'Failed to join room.' });
       }
     });
 
     // ── sendMessage ───────────────────────────────────────────────────────────
     socket.on('sendMessage', async ({ postId, text }) => {
       try {
-        if (!postId || !text?.trim()) {
-          return socket.emit('roomError', { message: 'postId and text are required.' });
-        }
+        if (!postId || !text?.trim()) return socket.emit('roomError', { message: 'postId and text are required.' });
+        if (text.trim().length > 1000)  return socket.emit('roomError', { message: 'Message too long (max 1000 characters).' });
 
-        // Hard cap on message length (mirrors the Mongoose schema)
-        if (text.trim().length > 1000) {
-          return socket.emit('roomError', { message: 'Message too long (max 1000 characters).' });
-        }
-
-        // Retrieve the ChatRoom
         const room = await ChatRoom.findOne({ postId });
-        if (!room || !room.isActive) {
-          return socket.emit('roomError', { message: 'Chat room is closed or does not exist.' });
-        }
+        if (!room || !room.isActive) return socket.emit('roomError', { message: 'Chat room is closed.' });
 
-        // Verify the post is still active (second guard after cron may have run)
         const post = await Post.findById(postId).select('isActive');
-        if (!post?.isActive) {
-          return socket.emit('roomError', { message: 'The post for this chat has expired.' });
-        }
+        if (!post?.isActive) return socket.emit('roomError', { message: 'The post for this chat has expired.' });
 
-        // Persist the message
         const message = await Message.create({
           roomId:    room._id,
           senderId:  socket.user._id,
@@ -182,7 +123,6 @@ const initSocket = (httpServer) => {
           timestamp: new Date(),
         });
 
-        // Build the broadcast payload
         const payload = {
           _id:        message._id,
           roomId:     postId,
@@ -193,74 +133,187 @@ const initSocket = (httpServer) => {
           timestamp:  message.timestamp,
         };
 
-        // Broadcast to ALL users in the room (including sender)
-        // This ensures the sender sees their own message via the socket stream
         io.to(postId).emit('newMessage', payload);
-
-        console.log(
-          `[Socket] Message from ${socket.user.displayName} in room ${postId}: "${text.trim().slice(0, 40)}"`
-        );
+        console.log(`[Socket] Message from ${socket.user.displayName} in post-room ${postId}`);
       } catch (err) {
         console.error('[Socket sendMessage error]', err);
-        socket.emit('roomError', { message: 'Failed to send message. Please try again.' });
+        socket.emit('roomError', { message: 'Failed to send message.' });
       }
     });
 
-    // ── closeRoom ─────────────────────────────────────────────────────────────
+    // ── closeRoom (post-linked) ───────────────────────────────────────────────
     socket.on('closeRoom', async ({ postId }) => {
       try {
-        if (!postId) {
-          return socket.emit('roomError', { message: 'postId is required to close a room.' });
-        }
+        if (!postId) return socket.emit('roomError', { message: 'postId is required.' });
 
-        // Verify the post exists
         const post = await Post.findById(postId).populate('author', '_id');
-        if (!post) {
-          return socket.emit('roomError', { message: 'Post not found.' });
-        }
+        if (!post) return socket.emit('roomError', { message: 'Post not found.' });
 
-        // Only the post author can close the room
         if (post.author._id.toString() !== socket.user._id.toString()) {
           return socket.emit('roomError', { message: 'Only the post author can close this room.' });
         }
 
-        // Find the chat room
         const room = await ChatRoom.findOne({ postId });
-        if (!room) {
-          return socket.emit('roomError', { message: 'Chat room not found.' });
-        }
-        if (!room.isActive) {
-          return socket.emit('roomError', { message: 'Room is already closed.' });
-        }
+        if (!room)          return socket.emit('roomError', { message: 'Chat room not found.' });
+        if (!room.isActive) return socket.emit('roomError', { message: 'Room is already closed.' });
 
-        // Deactivate the room
         room.isActive = false;
         await room.save();
 
-        // Broadcast to ALL users in the room (including the poster)
-        io.to(postId).emit('roomClosed', {
-          postId,
-          closedBy: socket.user.displayName,
-          message:  `Room closed by ${socket.user.displayName}.`,
-        });
-
-        console.log(
-          `[Socket] Room ${postId} closed by ${socket.user.displayName}`
-        );
+        io.to(postId).emit('roomClosed', { postId, closedBy: socket.user.displayName, message: `Room closed by ${socket.user.displayName}.` });
+        console.log(`[Socket] Post-room ${postId} closed by ${socket.user.displayName}`);
       } catch (err) {
         console.error('[Socket closeRoom error]', err);
-        socket.emit('roomError', { message: 'Failed to close room. Please try again.' });
+        socket.emit('roomError', { message: 'Failed to close room.' });
+      }
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  GLOBAL HUB ROOM EVENTS  (new)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // ── joinGlobalRoom ────────────────────────────────────────────────────────
+    socket.on('joinGlobalRoom', async ({ roomId }) => {
+      try {
+        if (!roomId) return socket.emit('roomError', { message: 'roomId is required.' });
+
+        const room = await ChatRoom.findById(roomId)
+          .populate('createdBy', 'displayName avatarUrl role');
+
+        if (!room || !room.isGlobal) return socket.emit('roomError', { message: 'Room not found.' });
+        if (!room.isActive)          return socket.emit('roomError', { message: 'This room is closed.' });
+
+        await ChatRoom.updateOne(
+          { _id: room._id },
+          { $addToSet: { participants: socket.user._id } }
+        );
+
+        // Track current global room on socket for cleanup
+        if (socket.currentGlobalRoom && socket.currentGlobalRoom !== roomId) {
+          socket.leave(socket.currentGlobalRoom);
+        }
+        socket.join(roomId);
+        socket.currentGlobalRoom = roomId;
+
+        // Fetch history
+        const history = await Message.find({ roomId: room._id })
+          .sort({ timestamp: -1 })
+          .limit(60)
+          .populate('senderId', 'displayName avatarUrl role')
+          .lean();
+
+        // Count online members in this io room
+        const socketsInRoom = await io.in(roomId).fetchSockets();
+        const onlineCount   = socketsInRoom.length;
+
+        socket.emit('globalJoined', {
+          roomId,
+          room:       room.toObject(),
+          history:    history.reverse(),
+          onlineCount,
+        });
+
+        // Notify others
+        socket.to(roomId).emit('globalUserJoined', {
+          userId:      socket.user._id,
+          displayName: socket.user.displayName,
+        });
+
+        console.log(`[Socket] ${socket.user.displayName} joined global room "${room.name}" (${roomId})`);
+      } catch (err) {
+        console.error('[Socket joinGlobalRoom error]', err);
+        socket.emit('roomError', { message: 'Failed to join room.' });
+      }
+    });
+
+    // ── sendGlobalMsg ─────────────────────────────────────────────────────────
+    socket.on('sendGlobalMsg', async ({ roomId, text }) => {
+      try {
+        if (!roomId || !text?.trim()) return socket.emit('roomError', { message: 'roomId and text are required.' });
+        if (text.trim().length > 1000) return socket.emit('roomError', { message: 'Message too long (max 1000 characters).' });
+
+        const room = await ChatRoom.findById(roomId);
+        if (!room || !room.isGlobal || !room.isActive) {
+          return socket.emit('roomError', { message: 'Room is closed or not found.' });
+        }
+
+        const message = await Message.create({
+          roomId:    room._id,
+          senderId:  socket.user._id,
+          text:      text.trim(),
+          timestamp: new Date(),
+        });
+
+        // Update lastMessageAt for 2hr inactivity tracking
+        await ChatRoom.updateOne({ _id: room._id }, { lastMessageAt: message.timestamp });
+
+        const payload = {
+          _id:          message._id,
+          roomId,
+          senderId:     socket.user._id,
+          senderName:   socket.user.displayName,
+          senderAvatar: socket.user.avatarUrl || null,
+          senderRole:   socket.user.role,
+          text:         message.text,
+          timestamp:    message.timestamp,
+        };
+
+        io.to(roomId).emit('globalMessage', payload);
+        console.log(`[Socket] Global msg from ${socket.user.displayName} in "${room.name}": "${text.trim().slice(0, 40)}"`);
+      } catch (err) {
+        console.error('[Socket sendGlobalMsg error]', err);
+        socket.emit('roomError', { message: 'Failed to send message.' });
+      }
+    });
+
+    // ── leaveGlobalRoom ───────────────────────────────────────────────────────
+    socket.on('leaveGlobalRoom', ({ roomId }) => {
+      if (roomId) {
+        socket.leave(roomId);
+        if (socket.currentGlobalRoom === roomId) socket.currentGlobalRoom = null;
+        socket.to(roomId).emit('globalUserLeft', {
+          userId:      socket.user._id,
+          displayName: socket.user.displayName,
+        });
+      }
+    });
+
+    // ── closeGlobalRoom ───────────────────────────────────────────────────────
+    socket.on('closeGlobalRoom', async ({ roomId }) => {
+      try {
+        if (!roomId) return socket.emit('roomError', { message: 'roomId is required.' });
+
+        const room = await ChatRoom.findById(roomId);
+        if (!room || !room.isGlobal) return socket.emit('roomError', { message: 'Room not found.' });
+        if (!room.isActive)          return socket.emit('roomError', { message: 'Room is already closed.' });
+
+        const isCreator = room.createdBy?.toString() === socket.user._id.toString();
+        if (!isCreator && socket.user.role !== 'Admin') {
+          return socket.emit('roomError', { message: 'Only the room creator can close this room.' });
+        }
+
+        room.isActive = false;
+        await room.save();
+
+        // Notify all members in the room
+        io.to(roomId).emit('globalRoomClosed', {
+          roomId,
+          closedBy: socket.user.displayName,
+        });
+
+        // Broadcast to everyone that room list has changed
+        io.emit('roomsUpdated');
+
+        console.log(`[Socket] Global room "${room.name}" (${roomId}) closed by ${socket.user.displayName}`);
+      } catch (err) {
+        console.error('[Socket closeGlobalRoom error]', err);
+        socket.emit('roomError', { message: 'Failed to close room.' });
       }
     });
 
     // ── disconnect ────────────────────────────────────────────────────────────
     socket.on('disconnect', (reason) => {
-      console.log(
-        `[Socket] Disconnected: user=${socket.user?.displayName}, ` +
-        `reason=${reason}, socketId=${socket.id}`
-      );
-      // socket.io automatically removes the socket from all rooms on disconnect
-      // No explicit room leave is needed here.
+      console.log(`[Socket] Disconnected: user=${socket.user?.displayName}, reason=${reason}, socketId=${socket.id}`);
     });
   });
 
