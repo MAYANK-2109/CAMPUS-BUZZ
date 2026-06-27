@@ -103,16 +103,47 @@ exports.createComplaint = async (req, res) => {
   }
 };
 
-// ── PATCH /api/complaints/:id  (Admin only) ───────────────────────────────────
+// ── GET /api/complaints/mine ──────────────────────────────────────────────────
+// Returns the MongoDB _id strings of every complaint filed by the current user.
+exports.getMyComplaintIds = async (req, res) => {
+  try {
+    const mine = await Complaint.find({ author: req.user._id }).select('_id').lean();
+    const ids  = mine.map((c) => String(c._id));
+    return res.status(200).json({ success: true, data: ids });
+  } catch (err) {
+    console.error('[complaintController.getMyComplaintIds]', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch your complaints.' });
+  }
+};
+
+// ── PATCH /api/complaints/:id  (Admin or original author) ─────────────────────
 exports.updateComplaintStatus = async (req, res) => {
   try {
     const { status, declineReason } = req.body;
 
-    if (!['Open', 'Resolved', 'Declined'].includes(status)) {
+    const validStatuses = ['Open', 'Resolved', 'Declined', 'Resolved (Verified)'];
+    if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: 'Status must be Open, Resolved, or Declined.',
+        message: `Status must be one of: ${validStatuses.join(', ')}.`,
       });
+    }
+
+    const complaint = await Complaint.findById(req.params.id);
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: 'Complaint not found.' });
+    }
+
+    const isAdmin = req.user.role === 'Admin';
+    const isAuthor = complaint.author.toString() === req.user._id.toString();
+
+    // Check authorization: Admin can set any status, student author can only verify or reopen
+    if (!isAdmin && !isAuthor) {
+      return res.status(403).json({ success: false, message: 'Not authorized to update this complaint.' });
+    }
+
+    if (status === 'Declined' && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Only Admins can decline complaints.' });
     }
 
     if (status === 'Declined' && (!declineReason || !declineReason.trim())) {
@@ -122,17 +153,24 @@ exports.updateComplaintStatus = async (req, res) => {
       });
     }
 
-    const complaint = await Complaint.findByIdAndUpdate(
-      req.params.id,
-      { status, ...(status === 'Declined' ? { declineReason: declineReason.trim() } : {}) },
-      { new: true, runValidators: true }
-    ).populate('author', 'displayName rollNo instituteEmail role');
+    complaint.status = status;
+    if (status === 'Declined') {
+      complaint.declineReason = declineReason.trim();
+    }
+    await complaint.save();
 
-    if (!complaint) {
-      return res.status(404).json({ success: false, message: 'Complaint not found.' });
+    // Populate author details only for Admin
+    let responseComplaint = complaint;
+    if (isAdmin) {
+      responseComplaint = await Complaint.findById(complaint._id).populate('author', 'displayName rollNo instituteEmail role');
     }
 
-    return res.status(200).json({ success: true, data: complaint });
+    const obj = responseComplaint.toObject();
+    if (!isAdmin) {
+      delete obj.author;
+    }
+
+    return res.status(200).json({ success: true, data: obj });
   } catch (err) {
     console.error('[complaintController.updateComplaintStatus]', err);
     if (err.name === 'CastError') {

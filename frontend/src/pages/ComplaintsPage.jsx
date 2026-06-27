@@ -11,9 +11,10 @@ import api         from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
 const STATUS_STYLES = {
-  Open:     'bg-orange-100 text-orange-800 border-orange-200',
-  Resolved: 'bg-green-100 text-green-800 border-green-200',
-  Declined: 'bg-red-100 text-red-800 border-red-200',
+  Open:                 'bg-orange-100 text-orange-800 border-orange-200',
+  Resolved:             'bg-amber-100 text-amber-800 border-amber-200',
+  Declined:             'bg-red-100 text-red-800 border-red-200',
+  'Resolved (Verified)': 'bg-green-100 text-green-800 border-green-200',
 };
 
 // Stop words excluded from the similarity search
@@ -116,6 +117,7 @@ const ComplaintsPage = () => {
   const isAdmin   = user?.role === 'Admin';
 
   const [complaints, setComplaints] = useState([]);
+  const [myIds,       setMyIds]       = useState(new Set());   // IDs filed by current user
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState('');
   const [showForm,   setShowForm]   = useState(false);
@@ -136,6 +138,16 @@ const ComplaintsPage = () => {
 
   // Editing
   const [editingId, setEditingId] = useState(null);
+
+  // Fetch IDs of complaints filed by this user
+  useEffect(() => {
+    if (isAdmin) return;
+    api.get('/complaints/mine')
+      .then(({ data }) => setMyIds(new Set(data.data)))
+      .catch(() => {});
+  }, [isAdmin]);
+
+  const isMyComplaint = (c) => myIds.has(c._id);
 
   const fetchComplaints = useCallback(async () => {
     setLoading(true);
@@ -176,6 +188,8 @@ const ComplaintsPage = () => {
     setFormError('');
     try {
       const { data } = await api.post('/complaints', form);
+      const newId = data.data._id;
+      setMyIds((prev) => new Set([...prev, newId]));
       setComplaints(prev => [data.data, ...prev]);
       setForm({ title: '', description: '' });
       setSimilar([]);
@@ -194,6 +208,24 @@ const ComplaintsPage = () => {
       setComplaints(prev => prev.map(c => c._id === complaint._id ? data.data : c));
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to update status.');
+    }
+  };
+
+  const handleVerify = async (complaint) => {
+    try {
+      const { data } = await api.patch(`/complaints/${complaint._id}`, { status: 'Resolved (Verified)' });
+      setComplaints(prev => prev.map(c => c._id === complaint._id ? data.data : c));
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to verify.');
+    }
+  };
+
+  const handleReopen = async (complaint) => {
+    try {
+      const { data } = await api.patch(`/complaints/${complaint._id}`, { status: 'Open' });
+      setComplaints(prev => prev.map(c => c._id === complaint._id ? data.data : c));
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to reopen.');
     }
   };
 
@@ -253,15 +285,21 @@ const ComplaintsPage = () => {
 
         {/* Filters */}
         <div className="flex gap-2 mb-6 flex-wrap">
-          {['', 'Open', 'Resolved', 'Declined'].map(s => (
+          {[
+            { value: '',                    label: 'All'      },
+            { value: 'Open',                label: '🔴 Open'  },
+            { value: 'Resolved',            label: '🟡 Resolved' },
+            { value: 'Resolved (Verified)', label: '✅ Verified' },
+            { value: 'Declined',            label: '❌ Declined' },
+          ].map(({ value, label }) => (
             <button
-              key={s || 'all'}
-              onClick={() => setFilter(s)}
+              key={value || 'all'}
+              onClick={() => setFilter(value)}
               className={`px-4 py-1.5 text-sm font-semibold rounded-full border transition-all ${
-                filter === s ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                filter === value ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
             >
-              {s || 'All'}
+              {label}
             </button>
           ))}
         </div>
@@ -303,6 +341,11 @@ const ComplaintsPage = () => {
                         {c.isEdited && (
                           <span className="text-[10px] font-semibold text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">edited</span>
                         )}
+                        {!isAdmin && isMyComplaint(c) && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200 uppercase tracking-wider">
+                            My Complaint
+                          </span>
+                        )}
                         {isAdmin && c.author && (
                           <span className="text-xs text-gray-500 font-medium">
                             by {c.author.displayName} ({c.author.rollNo})
@@ -324,6 +367,41 @@ const ComplaintsPage = () => {
                           <h3 className="font-semibold text-gray-900 text-base">{c.title}</h3>
                           <p className="text-gray-700 text-sm mt-1.5 leading-relaxed">{c.description}</p>
 
+                           {c.status === 'Resolved (Verified)' && (
+                            <div className="mt-3 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-xs font-semibold text-green-800">
+                              <span className="text-sm">✅</span>
+                              <span>Resolution verified by author.</span>
+                            </div>
+                          )}
+
+                          {!isAdmin && c.status === 'Resolved' && isMyComplaint(c) && (
+                            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                              <p className="text-xs font-semibold text-amber-900 mb-2">
+                                🟡 Admin marked this as resolved. Has your issue been fixed?
+                              </p>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleVerify(c)}
+                                  className="inline-flex items-center justify-center text-xs font-bold px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors shadow-sm"
+                                >
+                                  Yes, Resolved
+                                </button>
+                                <button
+                                  onClick={() => handleReopen(c)}
+                                  className="inline-flex items-center justify-center text-xs font-bold px-3 py-1.5 bg-white hover:bg-red-50 text-red-600 border border-red-200 rounded-md transition-colors shadow-sm"
+                                >
+                                  No, Reopen
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {!isAdmin && c.status === 'Resolved' && !isMyComplaint(c) && (
+                            <div className="mt-3 flex items-center gap-2 bg-amber-50/60 border border-amber-100 rounded-lg px-3 py-2 text-xs text-amber-700 font-medium">
+                              <span>🟡 Resolved by admin — awaiting author confirmation.</span>
+                            </div>
+                          )}
+
                           {c.status === 'Declined' && c.declineReason && (
                             <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-900">
                               <strong className="font-semibold text-red-950 block mb-1">Reason for declination:</strong>
@@ -335,8 +413,8 @@ const ComplaintsPage = () => {
                             <p className="text-xs text-gray-400 font-medium">
                               {new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                             </p>
-                            {/* Author edit button — only shown when admin has populated author field */}
-                            {isAdmin && c.author && c.author._id === user?._id && (
+                            {/* Author edit button — only shown when author checks out */}
+                            {((isAdmin && c.author && c.author._id === user?._id) || (!isAdmin && isMyComplaint(c))) && (
                               <button
                                 onClick={() => setEditingId(c._id)}
                                 className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900 transition-colors"

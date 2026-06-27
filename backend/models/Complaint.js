@@ -37,8 +37,8 @@ const ComplaintSchema = new mongoose.Schema(
     status: {
       type:    String,
       enum:    {
-        values:  ['Open', 'Resolved', 'Declined'],
-        message: 'Status must be Open, Resolved, or Declined',
+        values:  ['Open', 'Resolved', 'Declined', 'Resolved (Verified)'],
+        message: 'Status must be Open, Resolved, Declined, or Resolved (Verified)',
       },
       default: 'Open',
       index:   true,

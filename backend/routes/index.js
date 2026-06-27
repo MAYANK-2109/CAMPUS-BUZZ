@@ -155,12 +155,13 @@ router.post('/events/:id/rsvp', protect, async (req, res) => {
  * PATCH /api/complaints/:id   – Admin only: update status (Open / Resolved / Declined)
  * PATCH /api/complaints/:id/edit – Author only: edit title/description
  */
-router.get('/complaints/search',       protect, complaintController.searchComplaints);
-router.get('/complaints',              protect, complaintController.getComplaints);
-router.post('/complaints',             protect, complaintController.createComplaint);
+router.get('/complaints/mine',   protect,            complaintController.getMyComplaintIds);
+router.get('/complaints/search', protect, complaintController.searchComplaints);
+router.get('/complaints',        protect, complaintController.getComplaints);
+router.post('/complaints',       protect, complaintController.createComplaint);
 router.post('/complaints/:id/upvote',  protect, complaintController.upvoteComplaint);
 router.patch('/complaints/:id/edit',   protect, complaintController.editComplaint);
-router.patch('/complaints/:id',        protect, adminOnly, complaintController.updateComplaintStatus);
+router.patch('/complaints/:id',        protect,            complaintController.updateComplaintStatus);
 
 // ════════════════════════════════════════════════════════════════════════════════
 // CLUBS route  (/api/clubs)  – list all Club/Admin accounts for search & follow
