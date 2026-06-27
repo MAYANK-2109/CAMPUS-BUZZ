@@ -177,21 +177,27 @@ router.get('/rooms', protect, async (req, res) => {
 
     // Normalise post-linked rooms so the frontend can tell them apart
     const normalisedPostRooms = postRooms
-      .filter(r => r.postId) // guard against orphaned rooms
+      .filter(r => r && r.postId) // guard against orphaned rooms
       .map(r => ({
         ...r,
         _roomType: 'post',
-        name:    r.postId.title,
+        name:    r.postId.title || 'Untitled Post Chat',
         hashtag: r.postId.hashtag || '#resell',
       }));
 
     // Attach a tag so the frontend knows these are global
-    const normalisedGlobalRooms = globalRooms.map(r => ({ ...r, _roomType: 'global' }));
+    const normalisedGlobalRooms = globalRooms
+      .filter(Boolean)
+      .map(r => ({
+        ...r,
+        _roomType: 'global',
+        createdBy: r.createdBy || { displayName: 'System' }
+      }));
 
     return res.json({ success: true, data: [...normalisedGlobalRooms, ...normalisedPostRooms] });
   } catch (err) {
     console.error('[GET /rooms]', err);
-    return res.status(500).json({ success: false, message: 'Failed to fetch rooms.' });
+    return res.status(500).json({ success: false, message: 'Failed to fetch rooms.', error: err.message });
   }
 });
 

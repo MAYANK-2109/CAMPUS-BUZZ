@@ -15,7 +15,13 @@ import { useAuth } from './AuthContext';
 
 const SocketContext = createContext(null);
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
+// In production (Render), connect to the same origin as the page.
+// Override with REACT_APP_SOCKET_URL if backend is on a different domain.
+const SOCKET_URL =
+  process.env.REACT_APP_SOCKET_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? window.location.origin          // same-origin → Render backend
+    : 'http://localhost:5000');        // local dev
 
 export const SocketProvider = ({ children }) => {
   const { token, user }   = useAuth();

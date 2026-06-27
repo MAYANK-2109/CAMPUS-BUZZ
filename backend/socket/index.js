@@ -26,9 +26,23 @@ const ChatRoom    = require('../models/ChatRoom');
 const Message     = require('../models/Message');
 
 const initSocket = (httpServer) => {
+  // Mirror the allowed origins from the server CORS config.
+  // CLIENT_URL can be comma-separated (e.g. "https://campus-buzz.onrender.com,http://localhost:3000")
+  const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean);
+
+  if (process.env.NODE_ENV !== 'production' && !allowedOrigins.includes('http://localhost:3000')) {
+    allowedOrigins.push('http://localhost:3000');
+  }
+
   const io = new Server(httpServer, {
     cors: {
-      origin:      process.env.CLIENT_URL || 'http://localhost:3000',
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        callback(new Error(`CORS: socket origin "${origin}" not allowed.`));
+      },
       credentials: true,
     },
     pingTimeout:  60000,
@@ -213,11 +227,24 @@ const initSocket = (httpServer) => {
           onlineCount,
         });
 
-        // Notify others
+        // Notify others & broadcast updated online users list
         socket.to(roomId).emit('globalUserJoined', {
           userId:      socket.user._id,
           displayName: socket.user.displayName,
         });
+
+        // Build & broadcast the live online-users list for this room
+        const broadcastOnlineUsers = async () => {
+          const sockets = await io.in(roomId).fetchSockets();
+          const users = sockets.map(s => ({
+            _id:         s.user._id,
+            displayName: s.user.displayName,
+            avatarUrl:   s.user.avatarUrl || null,
+            role:        s.user.role,
+          }));
+          io.to(roomId).emit('onlineUsersUpdate', { roomId, users });
+        };
+        await broadcastOnlineUsers();
 
         console.log(`[Socket] ${socket.user.displayName} joined global room "${room.name}" (${roomId})`);
       } catch (err) {
@@ -267,7 +294,7 @@ const initSocket = (httpServer) => {
     });
 
     // ── leaveGlobalRoom ───────────────────────────────────────────────────────
-    socket.on('leaveGlobalRoom', ({ roomId }) => {
+    socket.on('leaveGlobalRoom', async ({ roomId }) => {
       if (roomId) {
         socket.leave(roomId);
         if (socket.currentGlobalRoom === roomId) socket.currentGlobalRoom = null;
@@ -275,7 +302,29 @@ const initSocket = (httpServer) => {
           userId:      socket.user._id,
           displayName: socket.user.displayName,
         });
+        // Broadcast updated online list after leave
+        const sockets = await io.in(roomId).fetchSockets();
+        const users = sockets.map(s => ({
+          _id:         s.user._id,
+          displayName: s.user.displayName,
+          avatarUrl:   s.user.avatarUrl || null,
+          role:        s.user.role,
+        }));
+        io.to(roomId).emit('onlineUsersUpdate', { roomId, users });
       }
+    });
+
+    // ── cabLocation — relay live GPS from driver to all room members ──────────
+    socket.on('cabLocation', ({ postId, lat, lng }) => {
+      if (!postId || lat == null || lng == null) return;
+      // Broadcast to everyone else in the post room (not the sender)
+      socket.to(postId).emit('cabLocationUpdate', {
+        postId,
+        lat,
+        lng,
+        sharedBy: socket.user.displayName,
+        ts: Date.now(),
+      });
     });
 
     // ── closeGlobalRoom ───────────────────────────────────────────────────────

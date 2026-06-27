@@ -20,7 +20,7 @@ const HASHTAG_COLORS = {
 };
 
 const CreatePostForm = ({ onPostCreated, onClose }) => {
-  const [form, setForm] = useState({ title: '', description: '', imageUrl: '', hashtag: 'None', expiresAt: '', customTagsStr: '' });
+  const [form, setForm] = useState({ title: '', description: '', imageUrl: '', hashtag: 'None', expiresAt: '', customTagsStr: '', totalFare: '' });
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
 
@@ -99,6 +99,7 @@ const CreatePostForm = ({ onPostCreated, onClose }) => {
         customTags,
         ...(form.imageUrl && { imageUrl: form.imageUrl.trim() }),
         ...(TIMED.has(form.hashtag) && { expiresAt: form.expiresAt }),
+        ...(form.hashtag === '#cabsplit' && form.totalFare && { totalFare: Number(form.totalFare) }),
       };
       const { data } = await api.post('/posts', payload);
       onPostCreated?.(data.data);
@@ -242,6 +243,23 @@ const CreatePostForm = ({ onPostCreated, onClose }) => {
                   value={form.expiresAt}
                   onChange={handleChange}
                   min={new Date().toISOString().slice(0, 16)}
+                />
+              </div>
+            )}
+
+            {/* Total fare for cabsplit */}
+            {form.hashtag === '#cabsplit' && (
+              <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-100 rounded-xl animate-fade-in-up">
+                <span className="text-blue-500 font-bold text-base flex-shrink-0">₹</span>
+                <input
+                  type="number"
+                  className="flex-1 text-sm text-gray-700 outline-none bg-transparent"
+                  name="totalFare"
+                  value={form.totalFare}
+                  onChange={handleChange}
+                  placeholder="Total cab fare (optional, e.g. 350)"
+                  min="0"
+                  step="1"
                 />
               </div>
             )}

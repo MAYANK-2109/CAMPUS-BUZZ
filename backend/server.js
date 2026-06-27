@@ -42,9 +42,31 @@ const connectDB = async () => {
 };
 
 // ── 3. Express Middleware ──────────────────────────────────────────────────
+// CLIENT_URL can be a single URL or a comma-separated list of allowed origins.
+// e.g. on Render: CLIENT_URL=https://campus-buzz.onrender.com,http://localhost:3000
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
+  .split(',')
+  .map(o => o.trim().replace(/\/$/, ''))  // normalise: strip trailing slash
+  .filter(Boolean);
+
+if (process.env.NODE_ENV !== 'production') {
+  // In dev, also allow the frontend (3000) and backend's own origin (5000)
+  // because CRA's proxy forwards requests with origin = backend URL.
+  ['http://localhost:3000', 'http://localhost:5000'].forEach(url => {
+    if (!allowedOrigins.includes(url)) allowedOrigins.push(url);
+  });
+}
+
 app.use(
   cors({
-    origin:      process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (server-to-server, curl, mobile apps)
+      if (!origin) return callback(null, true);
+      // Normalise the incoming origin by stripping any trailing slash
+      const normalised = origin.replace(/\/$/, '');
+      if (allowedOrigins.includes(normalised)) return callback(null, true);
+      callback(new Error(`CORS: origin "${origin}" not allowed.`));
+    },
     credentials: true,
   })
 );
