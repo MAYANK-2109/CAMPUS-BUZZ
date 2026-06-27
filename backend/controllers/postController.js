@@ -21,6 +21,10 @@ const Notification = require('../models/Notification');
 // ── Allowed time-sensitive hashtags that need an expiresAt ───────────────────
 const TIMED_HASHTAGS = new Set(['#foodsplit', '#cabsplit']);
 
+// ── Feed-ranking constants (tunable via env or query params) ──────────────────
+const DEFAULT_G = 0.8;   // gravity   – higher = popularity wins more
+const DEFAULT_H = 12;    // half-life – hours after which time-boost halves
+
 // ── GET /api/posts ────────────────────────────────────────────────────────────
 exports.getPosts = async (req, res) => {
   try {
@@ -28,33 +32,126 @@ exports.getPosts = async (req, res) => {
     const limit = Math.min(50, parseInt(req.query.limit) || 20);
     const skip  = (page - 1) * limit;
 
-    const filter = { isActive: true };
+    // Allow callers to request raw-chronological order (?sort=new)
+    const sortMode = req.query.sort || 'ranked';
+
+    // Tuning knobs (accept optional overrides from query string for A/B testing)
+    const G = parseFloat(req.query.g) || DEFAULT_G;
+    const H = parseFloat(req.query.h) || DEFAULT_H;
+
+    const matchStage = { isActive: true };
 
     // Hashtag filter
     if (req.query.hashtag && req.query.hashtag !== 'all') {
-      filter.hashtag = req.query.hashtag;
+      matchStage.hashtag = req.query.hashtag;
     }
 
     // Club feed: only posts by Club or Admin accounts
     if (req.query.feed === 'club') {
-      const User = require('../models/User');
       const clubUsers = await User.find({ role: { $in: ['Club', 'Admin'] } }).select('_id');
-      filter.author = { $in: clubUsers.map((u) => u._id) };
+      matchStage.author = { $in: clubUsers.map((u) => u._id) };
     }
 
-    const [posts, total] = await Promise.all([
-      Post.find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .populate('author',   'displayName role instituteEmail rollNo avatarUrl')
-        .populate('mentions', 'displayName _id'),
-      Post.countDocuments(filter),
+    if (sortMode === 'new') {
+      // ── Fast path: pure chronological (no ranking math needed) ───────────
+      const [posts, total] = await Promise.all([
+        Post.find(matchStage)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate('author',   'displayName role instituteEmail rollNo avatarUrl')
+          .populate('mentions', 'displayName _id'),
+        Post.countDocuments(matchStage),
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        data:    posts,
+        pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+      });
+    }
+
+    // ── Ranked path: aggregation pipeline ────────────────────────────────────
+    const pipeline = [
+      { $match: matchStage },
+
+      // ── Step 1-3: compute ranking score ───────────────────────────────────
+      {
+        $addFields: {
+          _likeCount:    { $size: '$likes' },
+          _dislikeCount: { $size: '$dislikes' },
+          _ageHours: {
+            // ($$NOW - createdAt) in ms → hours
+            // $$NOW is a MongoDB Date variable; $subtract of two Dates → ms
+            $divide: [
+              { $subtract: ['$$NOW', '$createdAt'] },
+              3_600_000, // ms → hours
+            ],
+          },
+        },
+      },
+      {
+        $addFields: {
+          // net_score = max(0, L - D)
+          _netScore: {
+            $max: [0, { $subtract: ['$_likeCount', '$_dislikeCount'] }],
+          },
+        },
+      },
+      {
+        $addFields: {
+          // time_decay = 1 / (1 + age_hours / H)
+          _timeDecay: {
+            $divide: [1, { $add: [1, { $divide: ['$_ageHours', H] }] }],
+          },
+        },
+      },
+      {
+        $addFields: {
+          // score = (net_score + 1)^G * time_decay
+          // MongoDB has no $pow for non-integer exponents, so we use $exp + $ln:
+          //   x^G  = exp(G * ln(x))
+          _score: {
+            $multiply: [
+              {
+                $exp: {
+                  $multiply: [
+                    G,
+                    { $ln: { $add: ['$_netScore', 1] } },
+                  ],
+                },
+              },
+              '$_timeDecay',
+            ],
+          },
+        },
+      },
+
+      // ── Step 4: sort by score desc, then createdAt desc (tiebreaker) ──────
+      { $sort: { _score: -1, createdAt: -1 } },
+
+      // ── Pagination ────────────────────────────────────────────────────────
+      {
+        $facet: {
+          data:  [{ $skip: skip }, { $limit: limit }],
+          total: [{ $count: 'count' }],
+        },
+      },
+    ];
+
+    const [result] = await Post.aggregate(pipeline);
+    const total = result.total[0]?.count ?? 0;
+    const rawPosts = result.data;
+
+    // Populate author + mentions (aggregation doesn't support .populate())
+    await Post.populate(rawPosts, [
+      { path: 'author',   select: 'displayName role instituteEmail rollNo avatarUrl' },
+      { path: 'mentions', select: 'displayName _id' },
     ]);
 
     return res.status(200).json({
       success: true,
-      data:    posts,
+      data:    rawPosts,
       pagination: {
         page,
         limit,
@@ -67,6 +164,7 @@ exports.getPosts = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to fetch posts.' });
   }
 };
+
 
 // ── POST /api/posts ───────────────────────────────────────────────────────────
 exports.createPost = async (req, res) => {
