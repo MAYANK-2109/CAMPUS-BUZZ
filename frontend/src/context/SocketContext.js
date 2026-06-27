@@ -15,15 +15,26 @@ import { useAuth } from './AuthContext';
 
 const SocketContext = createContext(null);
 
-// In production (Render), connect to the same origin as the page.
-// Override with REACT_APP_SOCKET_URL if backend is on a different domain.
+// REACT_APP_SOCKET_URL must be set to your backend URL in your hosting
+// environment (e.g. Vercel dashboard → Environment Variables).
+// Example: REACT_APP_SOCKET_URL=https://campus-buzz-backend.onrender.com
+//
+// In local development it falls back to http://localhost:5000.
+// NOTE: Do NOT fall back to window.location.origin in production —
+//       Vercel (and other serverless hosts) cannot run a Socket.io server.
 const SOCKET_URL =
   process.env.REACT_APP_SOCKET_URL ||
+<<<<<<< Updated upstream
   (process.env.REACT_APP_API_URL 
     ? process.env.REACT_APP_API_URL.replace(/\/api\/?$/, '') 
     : (process.env.NODE_ENV === 'production'
         ? window.location.origin          // same-origin → Render backend
         : 'http://localhost:5000'));       // local dev
+=======
+  (process.env.NODE_ENV === 'production'
+    ? null                             // force env-var in production
+    : 'http://localhost:5000');        // local dev
+>>>>>>> Stashed changes
 
 export const SocketProvider = ({ children }) => {
   const { token, user }   = useAuth();
@@ -41,12 +52,25 @@ export const SocketProvider = ({ children }) => {
       return;
     }
 
-    // Create socket with JWT in handshake auth
+    // Bail out with a clear error if no backend URL is configured.
+    // This prevents silent infinite-reconnect loops on Vercel / serverless hosts.
+    if (!SOCKET_URL) {
+      console.error(
+        '[Socket] REACT_APP_SOCKET_URL is not set. ' +
+        'Add it to your Vercel environment variables and redeploy.'
+      );
+      return;
+    }
+
+    // Create socket with JWT in handshake auth.
+    // Start with 'polling' (HTTP long-poll) then upgrade to 'websocket'.
+    // This is more reliable across different hosting platforms.
     const socket = io(SOCKET_URL, {
-      auth:              { token },
-      transports:        ['websocket', 'polling'],
-      reconnectionDelay: 2000,
-      reconnectionAttempts: 10,
+      auth:                 { token },
+      transports:           ['polling', 'websocket'],
+      reconnectionDelay:    3000,
+      reconnectionDelayMax: 10000,
+      reconnectionAttempts: 5,
     });
 
     socket.on('connect', () => {

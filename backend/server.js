@@ -13,6 +13,12 @@
  *   7. Listen for connections.
  */
 
+// ── 0. DNS override ─────────────────────────────────────────────────────────
+// Some restricted networks (college, corporate) block SRV DNS lookups used by
+// mongodb+srv:// URIs. Force Node.js to use Google's public DNS to resolve them.
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+
 // ── 1. Environment ─────────────────────────────────────────────────────────
 require('dotenv').config();
 
