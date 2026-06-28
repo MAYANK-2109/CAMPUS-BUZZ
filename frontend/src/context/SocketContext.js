@@ -19,7 +19,7 @@ const SocketContext = createContext(null);
 // environment (e.g. Vercel dashboard → Environment Variables).
 // Example: REACT_APP_SOCKET_URL=https://campus-buzz-backend.onrender.com
 //
-// In local development it falls back to http://localhost:5000.
+// In local development it falls back to http://localhost:5001.
 // NOTE: Do NOT fall back to window.location.origin in production —
 //       Vercel (and other serverless hosts) cannot run a Socket.io server.
 const SOCKET_URL =
@@ -28,7 +28,7 @@ const SOCKET_URL =
     ? process.env.REACT_APP_API_URL.replace(/\/api\/?$/, '') 
     : (process.env.NODE_ENV === 'production'
         ? window.location.origin          // same-origin → Render backend
-        : 'http://localhost:5000'));       // local dev
+        : 'http://localhost:5001'));       // local dev
 
 export const SocketProvider = ({ children }) => {
   const { token, user }   = useAuth();

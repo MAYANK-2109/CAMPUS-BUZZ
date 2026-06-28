@@ -144,7 +144,7 @@ const PostFeed = () => {
       {/* ── Floating create button ─────────────────────────────────────────── */}
       <button
         onClick={() => setShowForm(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gray-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:bg-gray-800 active:scale-90 transition-all duration-150 z-20"
+        className="fixed bottom-24 md:bottom-6 right-6 w-14 h-14 bg-gray-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:bg-gray-800 active:scale-90 transition-all duration-150 z-20"
         title="Create Post"
       >
         <PenSquare className="w-6 h-6" strokeWidth={2} />
