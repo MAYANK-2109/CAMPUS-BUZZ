@@ -1,13 +1,15 @@
 <div align="center">
 
+<img src="./frontend/public/logo.png" alt="Campus Buzz Logo" width="150" />
+
 <br/>
 
 ```
  ██████╗ █████╗ ███╗   ███╗██████╗ ██╗   ██╗███████╗
-██╔════╝██╔══██╗████╗ ████║██╔══██╗██║   ██║╚══███╔╝
-██║     ███████║██╔████╔██║██████╔╝██║   ██║  ███╔╝ 
-██║     ██╔══██║██║╚██╔╝██║██╔═══╝ ██║   ██║ ███╔╝  
-╚██████╗██║  ██║██║ ╚═╝ ██║██║     ╚██████╔╝███████╗
+██╔════╝██╔══██╗████╗ ████║██╔══██╗██║   ██║██╔════╝
+██║     ███████║██╔████╔██║██████╔╝██║   ██║███████╗
+██║     ██╔══██║██║╚██╔╝██║██╔═══╝ ██║   ██║╚════██║
+╚██████╗██║  ██║██║ ╚═╝ ██║██║     ╚██████╔╝███████║
  ╚═════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝      ╚═════╝ ╚══════╝
                         BUZZ
 ```
@@ -15,6 +17,12 @@
 ### 🎓 The All-in-One Campus Coordination Platform for NITRR
 
 <br/>
+
+<a href="YOUR_VIDEO_LINK_HERE">
+  <img src="https://img.shields.io/badge/▶_Watch_Video_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch Video Demo" height="40" />
+</a>
+
+<br/><br/>
 
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
@@ -33,9 +41,18 @@
 
 ---
 
+## 👥 Team UNKNOWNS (Contributors)
+- Team Mate 1 (Name)
+- Team Mate 2 (Name)
+- Team Mate 3 (Name)
+- Team Mate 4 (Name)
+
+---
+
 ## 📋 Table of Contents
 
 - [✨ What is Campus Buzz?](#-what-is-campus-buzz)
+- [🗺️ Data Flow Architecture](#️-data-flow-architecture)
 - [🎯 Features](#-features)
 - [🏗️ Tech Stack](#️-tech-stack)
 - [🗂️ Project Structure](#️-project-structure)
@@ -63,6 +80,37 @@ https://drive.google.com/drive/folders/12sLIhtUqlvR8WThyVVnPdKA7BpHnj9MX?usp=dri
 **Campus Buzz** is a real-time campus coordination web platform built exclusively for **NIT Raipur (NITRR)** students, clubs, and administrators. It unifies social posting, event management, live chat, anonymous complaints, and club announcements — accessible only with a verified `@nitrr.ac.in` email.
 
 > _"One platform. Every beat of campus life."_
+
+---
+
+## 🗺️ Data Flow Architecture
+
+Here is a high-level overview of how data flows through Campus Buzz:
+
+```text
+FRONTEND (React)                          BACKEND (Express + Socket.io)
+───────────────────────                   ──────────────────────────────────────
+
+┌──────────────────┐   HTTP REST          ┌──────────────────────────────────┐
+│   AuthContext    │ ◄──────────────────► │  routes/index.js                 │
+│  (token, user)   │                      │  /api/auth, /api/posts,          │
+└────────┬─────────┘                      │  /api/events, /api/complaints,   │
+         │                                │  /api/announcements,             │
+         │ token                          │  /api/notifications, /api/users, │
+         ▼                                │  /api/clubs, /api/rooms,         │
+┌──────────────────┐                      │  /api/chat-rooms                 │
+│  SocketContext   │ ◄── WebSocket ─────► │  socket/index.js                 │
+│  (1 connection)  │                      │  JWT middleware → event handlers  │
+└────────┬─────────┘                      └──────────┬───────────────────────┘
+         │                                           │
+         │ socket / axios                  ┌──────────▼───────────────────────┐
+         ▼                                 │  MongoDB (Mongoose)               │
+┌──────────────────┐                       │  Users, Posts, ChatRooms,        │
+│  Pages &         │                       │  Messages, Events, Complaints,   │
+│  Components      │                       │  Announcements, Notifications    │
+└──────────────────┘                       └──────────────────────────────────┘
+```
+For more in-depth details on the socket events, cron jobs, and database schema, please check the [Data Flow Architecture](./DATA_FLOW.md) document.
 
 ---
 
