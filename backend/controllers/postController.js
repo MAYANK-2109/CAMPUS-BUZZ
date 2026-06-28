@@ -264,8 +264,10 @@ exports.createPost = async (req, res) => {
     }
 
     // Populate author + mentions for the response
-    await post.populate('author',   'displayName role instituteEmail rollNo avatarUrl');
-    await post.populate('mentions', 'displayName _id');
+    await post.populate([
+      { path: 'author', select: 'displayName role instituteEmail rollNo avatarUrl' },
+      { path: 'mentions', select: 'displayName _id' }
+    ]);
 
     return res.status(201).json({ success: true, data: post });
   } catch (err) {
