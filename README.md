@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./frontend/public/logo.png" alt="Campus Buzz Logo" width="200" />
+<img src="./frontend/public/logo.png" alt="Campus Buzz Logo" width="250" />
 
 <br/>
 
