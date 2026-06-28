@@ -1,24 +1,23 @@
 <div align="center">
 
-<img src="./frontend/public/logo.png" alt="Campus Buzz Logo" width="150" />
+<img src="./frontend/public/logo.png" alt="Campus Buzz Logo" width="200" />
 
 <br/>
 
 ```
- ██████╗ █████╗ ███╗   ███╗██████╗ ██╗   ██╗███████╗
-██╔════╝██╔══██╗████╗ ████║██╔══██╗██║   ██║██╔════╝
-██║     ███████║██╔████╔██║██████╔╝██║   ██║███████╗
-██║     ██╔══██║██║╚██╔╝██║██╔═══╝ ██║   ██║╚════██║
-╚██████╗██║  ██║██║ ╚═╝ ██║██║     ╚██████╔╝███████║
- ╚═════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝      ╚═════╝ ╚══════╝
-                        BUZZ
+ ██████╗  █████╗ ███╗   ███╗██████╗ ██╗   ██╗███████╗    ██████╗ ██╗   ██╗███████╗███████╗
+██╔════╝ ██╔══██╗████╗ ████║██╔══██╗██║   ██║██╔════╝    ██╔══██╗██║   ██║╚══███╔╝╚══███╔╝
+██║      ███████║██╔████╔██║██████╔╝██║   ██║███████╗    ██████╔╝██║   ██║  ███╔╝   ███╔╝ 
+██║      ██╔══██║██║╚██╔╝██║██╔═══╝ ██║   ██║╚════██║    ██╔══██╗██║   ██║ ███╔╝   ███╔╝  
+╚██████╗ ██║  ██║██║ ╚═╝ ██║██║     ╚██████╔╝███████║    ██████╔╝╚██████╔╝███████╗███████╗
+ ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝      ╚═════╝ ╚══════╝    ╚═════╝  ╚═════╝ ╚══════╝╚══════╝
 ```
 
 ### 🎓 The All-in-One Campus Coordination Platform for NITRR
 
 <br/>
 
-<a href="YOUR_VIDEO_LINK_HERE">
+<a href="https://drive.google.com/drive/folders/12sLIhtUqlvR8WThyVVnPdKA7BpHnj9MX?usp=drive_link">
   <img src="https://img.shields.io/badge/▶_Watch_Video_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch Video Demo" height="40" />
 </a>
 
@@ -42,10 +41,10 @@
 ---
 
 ## 👥 Team UNKNOWNS (Contributors)
-- Team Mate 1 (Name)
-- Team Mate 2 (Name)
-- Team Mate 3 (Name)
-- Team Mate 4 (Name)
+- Mayank Kumar Sahu
+- Nandish Agarwal
+- Nikhil Kumar Singh
+- Mayank Kumar Chandrikapure (L)
 
 ---
 
@@ -64,14 +63,6 @@
 - [🗃️ Data Models](#️-data-models)
 - [⏰ Background Jobs](#-background-jobs)
 - [🚀 Deployment](#-deployment)
-
-  ---
-
-## ✨ Google Drive Video Link
-
-https://drive.google.com/drive/folders/12sLIhtUqlvR8WThyVVnPdKA7BpHnj9MX?usp=drive_link
-
----
 
 ---
 
@@ -602,7 +593,7 @@ A single cron job runs **every 5 minutes** (`*/5 * * * *`), started after the DB
 
 <div align="center">
 
-Made with ❤️ for **NIT Raipur** | Built by **Mayank**
+Made with ❤️ for **NIT Raipur** | Built by **UNKNOWNS**
 
 [![GitHub](https://img.shields.io/badge/GitHub-MAYANK--2109-181717?style=for-the-badge&logo=github)](https://github.com/MAYANK-2109)
 
