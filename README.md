@@ -20,6 +20,10 @@
 <a href="https://drive.google.com/drive/folders/12sLIhtUqlvR8WThyVVnPdKA7BpHnj9MX?usp=drive_link">
   <img src="https://img.shields.io/badge/▶_Watch_Video_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch Video Demo" height="40" />
 </a>
+&nbsp;&nbsp;
+<a href="https://campus-buzz-iota.vercel.app/">
+  <img src="https://img.shields.io/badge/🌍_Live_Website-0055FF?style=for-the-badge" alt="Live Website" height="40" />
+</a>
 
 <br/><br/>
 
