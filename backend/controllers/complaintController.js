@@ -22,40 +22,25 @@ exports.getComplaints = async (req, res) => {
     if (req.query.status) filter.status = req.query.status;
 
     // ── PRIVACY RULE ──────────────────────────────────────────────────────────
-    // Admins receive complaints with author populated.
-    // Students/Club accounts receive complaints without the author field.
-    // This is enforced HERE in the controller, not in the schema.
-    const isAdmin = req.user.role === 'Admin';
+    // Complaints are completely anonymous for everyone, including Admins.
 
     let query = Complaint.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit);
-
-    if (isAdmin) {
-      // Populate author details for Admin
-      query = query.populate('author', 'displayName rollNo instituteEmail role');
-    } else {
-      // Defence-in-depth: exclude author at the DB projection level for non-Admins.
-      // The serialisation step below also deletes obj.author — two independent layers.
-      query = query.select('-author');
-    }
+      .limit(limit)
+      .select('-author');
 
     const [complaints, total] = await Promise.all([
       query.exec(),
       Complaint.countDocuments(filter),
     ]);
 
-    // Strip author from the response payload for non-Admin users.
-    // We use map() here instead of a Mongoose projection so the DB query
-    // is identical – the only difference is what we serialise over the wire.
-    const safeComplaints = isAdmin
-      ? complaints
-      : complaints.map((c) => {
-          const obj = c.toObject();
-          delete obj.author;   // <-- Author anonymised for Students/Club
-          return obj;
-        });
+    // Strip author from the response payload for all users.
+    const safeComplaints = complaints.map((c) => {
+      const obj = c.toObject();
+      delete obj.author;   // <-- Author anonymised
+      return obj;
+    });
 
     return res.status(200).json({
       success: true,
@@ -162,16 +147,8 @@ exports.updateComplaintStatus = async (req, res) => {
     }
     await complaint.save();
 
-    // Populate author details only for Admin
-    let responseComplaint = complaint;
-    if (isAdmin) {
-      responseComplaint = await Complaint.findById(complaint._id).populate('author', 'displayName rollNo instituteEmail role');
-    }
-
-    const obj = responseComplaint.toObject();
-    if (!isAdmin) {
-      delete obj.author;
-    }
+    const obj = complaint.toObject();
+    delete obj.author; // Anonymised
 
     return res.status(200).json({ success: true, data: obj });
   } catch (err) {
