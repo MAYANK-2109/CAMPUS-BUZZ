@@ -23,7 +23,8 @@ const { emitNotifications } = require('../socket');
 // ── Allowed time-sensitive hashtags that need an expiresAt ───────────────────
 const TIMED_HASHTAGS = new Set(['#foodsplit', '#cabsplit']);
 
-// ── Hashtags that get a Socket.io chat room (mirrors socket/index.js) ────────
+// ── Hashtags that automatically get a Socket.io chat room ───────────────────
+// (mirrors the same set in socket/index.js)
 const CHAT_HASHTAGS = new Set(['#foodsplit', '#cabsplit', '#resell']);
 
 // ── Feed-ranking constants (tunable via env or query params) ──────────────────
@@ -175,17 +176,12 @@ exports.getPosts = async (req, res) => {
 // ── POST /api/posts ───────────────────────────────────────────────────────────
 exports.createPost = async (req, res) => {
   try {
-    const { title, description, imageUrl, hashtag, expiresAt, customTags, totalFare } = req.body;
+    let { title, description, imageUrl, hashtag, expiresAt, customTags, totalFare } = req.body;
 
     // imageUrl is optional — posts without an image render as text-only.
 
-    // Enforce that every post must have a hashtag
-    if (!hashtag || hashtag === 'None') {
-      return res.status(400).json({
-        success: false,
-        message: 'A hashtag is mandatory for every post.',
-      });
-    }
+    // If no primary hashtag provided, default to 'None'
+    hashtag = hashtag || 'None';
 
     // expiresAt is required for time-sensitive hashtags
     if (TIMED_HASHTAGS.has(hashtag)) {
@@ -263,8 +259,10 @@ exports.createPost = async (req, res) => {
     }
 
     // Populate author + mentions for the response
-    await post.populate('author',   'displayName role instituteEmail rollNo avatarUrl');
-    await post.populate('mentions', 'displayName _id');
+    await post.populate([
+      { path: 'author', select: 'displayName role instituteEmail rollNo avatarUrl' },
+      { path: 'mentions', select: 'displayName _id' }
+    ]);
 
     return res.status(201).json({ success: true, data: post });
   } catch (err) {

@@ -5,13 +5,15 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Bookmark, Grid3x3 } from 'lucide-react';
+import { Bookmark, Grid3x3, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import PostCard from '../components/PostCard';
 
 const ProfilePage = () => {
-  const { user, login } = useAuth();
+  const { user, login, logout } = useAuth();
+  const navigate = useNavigate();
   
   const [activeTab,    setActiveTab]   = useState('posts');
   const [editing,      setEditing]     = useState(false);
@@ -132,12 +134,21 @@ const ProfilePage = () => {
             <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-5 mb-4">
               <h1 className="text-xl font-medium truncate">{user.displayName}</h1>
               {!editing && (
-                <button 
-                  onClick={() => setEditing(true)}
-                  className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-sm font-semibold rounded-lg transition-colors inline-block w-max"
-                >
-                  Edit Profile
-                </button>
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => setEditing(true)}
+                    className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-sm font-semibold rounded-lg transition-colors inline-block w-max"
+                  >
+                    Edit Profile
+                  </button>
+                  <button 
+                    onClick={() => { logout(); navigate('/login'); }}
+                    className="md:hidden flex items-center gap-2 px-4 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 text-sm font-semibold rounded-lg transition-colors w-max"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </div>
               )}
             </div>
             

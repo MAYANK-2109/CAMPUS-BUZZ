@@ -59,11 +59,13 @@ const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
 if (process.env.NODE_ENV !== 'production') {
   // In dev, also allow the frontend (3000) and the backend's own origin,
   // because CRA's proxy forwards requests with origin = backend URL.
-  // The backend origin is derived from PORT so this keeps working on any port
-  // (5000 is unusable on macOS — Control Center's AirPlay Receiver owns it).
+  // The backend origin is derived from PORT rather than hardcoded, so this
+  // keeps working whichever port the backend runs on. (5000 is unusable on
+  // macOS — Control Center's AirPlay Receiver owns it.)
   const devPort = process.env.PORT || 5000;
   [
     'http://localhost:3000',
+    'http://127.0.0.1:3000',
     `http://localhost:${devPort}`,
     `http://127.0.0.1:${devPort}`,
   ].forEach(url => {
