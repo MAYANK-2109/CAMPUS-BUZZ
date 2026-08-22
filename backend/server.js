@@ -57,37 +57,24 @@ const configuredOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
   .map(o => o.trim().replace(/\/$/, ''))  // normalise: strip trailing slash
   .filter(Boolean);
 
-<<<<<<< Updated upstream
-if (process.env.NODE_ENV !== 'production') {
-  // In dev, also allow the frontend (3000) and the backend's own origin,
-  // because CRA's proxy forwards requests with origin = backend URL.
-  // The backend origin is derived from PORT rather than hardcoded, so this
-  // keeps working whichever port the backend runs on. (5000 is unusable on
-  // macOS — Control Center's AirPlay Receiver owns it.)
-  const devPort = process.env.PORT || 5000;
-  [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    `http://localhost:${devPort}`,
-    `http://127.0.0.1:${devPort}`,
-  ].forEach(url => {
-    if (!allowedOrigins.includes(url)) allowedOrigins.push(url);
-  });
-}
-=======
+// Whether a browser origin may call this API.
+//
+// Resolution of a conflict between two approaches: an explicit list of dev
+// origins derived from PORT, and a regex allowing any localhost port. The regex
+// wins — it covers every dev port without needing to know which one the backend
+// or dev server happens to be on, so it does not break when a port changes.
+// It stays strictly limited to non-production.
 const isOriginAllowed = (origin) => {
-  if (!origin) return true; // Allow non-browser requests (curl, server-to-server, mobile apps)
+  if (!origin) return true;   // non-browser callers: curl, server-to-server, mobile
   const normalised = origin.replace(/\/$/, '');
   if (configuredOrigins.includes(normalised)) return true;
-  // In dev, allow any localhost or 127.0.0.1 origin (e.g. 3000, 5000, etc.)
+
+  // In dev, allow any localhost / 127.0.0.1 origin on any port.
   if (process.env.NODE_ENV !== 'production') {
-    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalised)) {
-      return true;
-    }
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalised)) return true;
   }
   return false;
 };
->>>>>>> Stashed changes
 
 app.use(
   cors({

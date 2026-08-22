@@ -28,54 +28,32 @@ const Message     = require('../models/Message');
 const initSocket = (httpServer) => {
   const configuredOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
     .split(',')
-<<<<<<< Updated upstream
     .map(o => o.trim().replace(/\/$/, ''))   // normalise: strip trailing slash
     .filter(Boolean);
 
-  if (process.env.NODE_ENV !== 'production') {
-    // Mirror the dev origins allowed by the Express CORS config in server.js.
-    // Both hostname forms are listed because the dev server and the API may be
-    // reached as either localhost or 127.0.0.1, and they are distinct origins.
-    const devPort = process.env.PORT || 5000;
-    [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      `http://localhost:${devPort}`,
-      `http://127.0.0.1:${devPort}`,
-    ].forEach(url => {
-      if (!allowedOrigins.includes(url)) allowedOrigins.push(url);
-    });
-  }
-=======
-    .map(o => o.trim().replace(/\/$/, ''))
-    .filter(Boolean);
-
+  // Same rule as the Express CORS config in server.js — kept identical on
+  // purpose: the HTTP API and the Socket.io handshake must agree, or the page
+  // loads and then silently fails to connect its socket.
   const isOriginAllowed = (origin) => {
-    if (!origin) return true;
+    if (!origin) return true;   // non-browser callers
     const normalised = origin.replace(/\/$/, '');
     if (configuredOrigins.includes(normalised)) return true;
+
+    // In dev, allow any localhost / 127.0.0.1 origin on any port.
     if (process.env.NODE_ENV !== 'production') {
-      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalised)) {
-        return true;
-      }
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalised)) return true;
     }
     return false;
   };
->>>>>>> Stashed changes
 
   const io = new Server(httpServer, {
     cors: {
       origin: (origin, callback) => {
-<<<<<<< Updated upstream
-        if (!origin) return callback(null, true);
-        const normalised = origin.replace(/\/$/, '');
-        if (allowedOrigins.includes(normalised)) return callback(null, true);
-        console.warn(`[Socket.io] Rejected origin "${origin}". Allowed: ${allowedOrigins.join(', ')}`);
-        callback(new Error(`CORS: socket origin "${origin}" not allowed.`));
-=======
         if (isOriginAllowed(origin)) return callback(null, true);
+        // Reject with `false`, not an Error: an Error surfaces as an opaque 500
+        // on the handshake, whereas false yields a clean CORS rejection.
+        console.warn(`[Socket.io] Rejected origin "${origin}".`);
         return callback(null, false);
->>>>>>> Stashed changes
       },
       credentials: true,
     },
