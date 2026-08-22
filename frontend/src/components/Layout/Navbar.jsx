@@ -11,17 +11,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  Home, Calendar, ShieldAlert,
-  Bell, LogOut, User, ChevronUp, MessageSquare,
+  Home, LayoutGrid,
+  Bell, LogOut, User, ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 
 const NAV_ITEMS = [
-  { label: 'Feed',       to: '/feed',       Icon: Home },
-  { label: 'Calendar',   to: '/calendar',   Icon: Calendar },
-  { label: 'Complaints', to: '/complaints', Icon: ShieldAlert },
-  { label: 'Chat',       to: '/chat',       Icon: MessageSquare },
+  { label: 'Feed',      to: '/feed',      Icon: Home },
+  { label: 'Resources', to: '/resources', Icon: LayoutGrid },
 ];
 
 const Navbar = () => {

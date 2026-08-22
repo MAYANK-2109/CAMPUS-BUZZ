@@ -46,13 +46,13 @@ function usePostFeed(isClubMode) {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [isClubMode]); // eslint-disable-line
+  }, [isClubMode]);
 
   useEffect(() => {
     setPage(1);
     setFilter('all');
     fetchPosts(1, 'all', true);
-  }, [isClubMode]); // eslint-disable-line
+  }, [isClubMode]);
 
   const handleFilterChange = f => { setFilter(f); setPage(1); fetchPosts(1, f, true); };
   const loadMore = () => fetchPosts(page + 1, filter);

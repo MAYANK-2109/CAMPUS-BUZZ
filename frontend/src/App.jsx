@@ -28,6 +28,7 @@ import ProfilePage        from './pages/ProfilePage';
 import UserProfilePage    from './pages/UserProfilePage';
 import NotificationsPage  from './pages/NotificationsPage';
 import ChatHubPage        from './pages/ChatHubPage';
+import ResourcesPage      from './pages/ResourcesPage';
 import LibraryPage        from './pages/LibraryPage';
 
 /**
@@ -160,6 +161,18 @@ const App = () => (
               <ProtectedRoute>
                 <AuthLayout fullBleed>
                   <ChatHubPage />
+                </AuthLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ── Resources hub ────────────────────────────────────────────── */}
+          <Route
+            path="/resources"
+            element={
+              <ProtectedRoute>
+                <AuthLayout fullBleed>
+                  <ResourcesPage />
                 </AuthLayout>
               </ProtectedRoute>
             }
