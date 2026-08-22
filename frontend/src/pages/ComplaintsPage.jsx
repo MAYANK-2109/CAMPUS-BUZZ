@@ -141,11 +141,10 @@ const ComplaintsPage = () => {
 
   // Fetch IDs of complaints filed by this user
   useEffect(() => {
-    if (isAdmin) return;
     api.get('/complaints/mine')
       .then(({ data }) => setMyIds(new Set(data.data)))
       .catch(() => {});
-  }, [isAdmin]);
+  }, []);
 
   const isMyComplaint = (c) => myIds.has(c._id);
 
@@ -363,14 +362,9 @@ const ComplaintsPage = () => {
                         {c.isEdited && (
                           <span className="text-[10px] font-semibold text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">edited</span>
                         )}
-                        {!isAdmin && isMyComplaint(c) && (
+                        {isMyComplaint(c) && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200 uppercase tracking-wider">
                             My Complaint
-                          </span>
-                        )}
-                        {isAdmin && c.author && (
-                          <span className="text-xs text-gray-500 font-medium">
-                            by {c.author.displayName} ({c.author.rollNo})
                           </span>
                         )}
                       </div>
@@ -396,7 +390,7 @@ const ComplaintsPage = () => {
                             </div>
                           )}
 
-                          {!isAdmin && c.status === 'Resolved' && isMyComplaint(c) && (
+                          {c.status === 'Resolved' && isMyComplaint(c) && (
                             <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
                               <p className="text-xs font-semibold text-amber-900 mb-2">
                                 🟡 Admin marked this as resolved. Has your issue been fixed?
@@ -418,7 +412,7 @@ const ComplaintsPage = () => {
                             </div>
                           )}
 
-                          {!isAdmin && c.status === 'Resolved' && !isMyComplaint(c) && (
+                          {c.status === 'Resolved' && !isMyComplaint(c) && (
                             <div className="mt-3 flex items-center gap-2 bg-amber-50/60 border border-amber-100 rounded-lg px-3 py-2 text-xs text-amber-700 font-medium">
                               <span>🟡 Resolved by admin — awaiting author confirmation.</span>
                             </div>
@@ -435,8 +429,7 @@ const ComplaintsPage = () => {
                             <p className="text-xs text-gray-400 font-medium">
                               {new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                             </p>
-                            {/* Author edit button — only shown when author checks out */}
-                            {((isAdmin && c.author && c.author._id === user?._id) || (!isAdmin && isMyComplaint(c))) && (
+                            {isMyComplaint(c) && (
                               <button
                                 onClick={() => setEditingId(c._id)}
                                 className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900 transition-colors"
