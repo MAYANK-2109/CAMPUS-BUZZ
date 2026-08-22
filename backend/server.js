@@ -57,9 +57,9 @@ const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
   .filter(Boolean);
 
 if (process.env.NODE_ENV !== 'production') {
-  // In dev, also allow the frontend (3000) and backend's own origin (5000)
+  // In dev, also allow the frontend (3000) and backend's own origin (5001)
   // because CRA's proxy forwards requests with origin = backend URL.
-  ['http://localhost:3000', 'http://localhost:5000'].forEach(url => {
+  ['http://localhost:3000', 'http://localhost:5001'].forEach(url => {
     if (!allowedOrigins.includes(url)) allowedOrigins.push(url);
   });
 }
