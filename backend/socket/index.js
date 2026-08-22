@@ -26,10 +26,9 @@ const ChatRoom    = require('../models/ChatRoom');
 const Message     = require('../models/Message');
 
 const initSocket = (httpServer) => {
-  // Mirror the allowed origins from the server CORS config.
-  // CLIENT_URL can be comma-separated (e.g. "https://campus-buzz.onrender.com,http://localhost:3000")
-  const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
+  const configuredOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
     .split(',')
+<<<<<<< Updated upstream
     .map(o => o.trim().replace(/\/$/, ''))   // normalise: strip trailing slash
     .filter(Boolean);
 
@@ -47,15 +46,36 @@ const initSocket = (httpServer) => {
       if (!allowedOrigins.includes(url)) allowedOrigins.push(url);
     });
   }
+=======
+    .map(o => o.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+
+  const isOriginAllowed = (origin) => {
+    if (!origin) return true;
+    const normalised = origin.replace(/\/$/, '');
+    if (configuredOrigins.includes(normalised)) return true;
+    if (process.env.NODE_ENV !== 'production') {
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalised)) {
+        return true;
+      }
+    }
+    return false;
+  };
+>>>>>>> Stashed changes
 
   const io = new Server(httpServer, {
     cors: {
       origin: (origin, callback) => {
+<<<<<<< Updated upstream
         if (!origin) return callback(null, true);
         const normalised = origin.replace(/\/$/, '');
         if (allowedOrigins.includes(normalised)) return callback(null, true);
         console.warn(`[Socket.io] Rejected origin "${origin}". Allowed: ${allowedOrigins.join(', ')}`);
         callback(new Error(`CORS: socket origin "${origin}" not allowed.`));
+=======
+        if (isOriginAllowed(origin)) return callback(null, true);
+        return callback(null, false);
+>>>>>>> Stashed changes
       },
       credentials: true,
     },
