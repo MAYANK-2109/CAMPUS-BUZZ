@@ -119,8 +119,8 @@ const ProfilePage = () => {
     <div className="min-h-screen bg-gray-50 text-gray-900 pb-12">
       <div className="max-w-2xl mx-auto px-4 py-8">
         
-        <div className="flex items-start gap-6 md:gap-10 mb-10">
-          <div className="w-24 h-24 md:w-36 md:h-36 flex-shrink-0 rounded-full bg-gray-200 border border-gray-300 flex items-center justify-center overflow-hidden">
+        <div className="flex items-start gap-4 sm:gap-6 md:gap-10 mb-10">
+          <div className="w-16 h-16 sm:w-24 sm:h-24 md:w-36 md:h-36 flex-shrink-0 rounded-full bg-gray-200 border border-gray-300 flex items-center justify-center overflow-hidden">
             {user.avatarUrl ? (
               <img src={user.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
             ) : (
@@ -134,16 +134,16 @@ const ProfilePage = () => {
             <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-5 mb-4">
               <h1 className="text-xl font-medium truncate">{user.displayName}</h1>
               {!editing && (
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                   <button 
                     onClick={() => setEditing(true)}
-                    className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-sm font-semibold rounded-lg transition-colors inline-block w-max"
+                    className="px-3 sm:px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-sm font-semibold rounded-lg transition-colors inline-block w-max whitespace-nowrap"
                   >
                     Edit Profile
                   </button>
                   <button 
                     onClick={() => { logout(); navigate('/login'); }}
-                    className="md:hidden flex items-center gap-2 px-4 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 text-sm font-semibold rounded-lg transition-colors w-max"
+                    className="md:hidden flex items-center gap-2 px-3 sm:px-4 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 text-sm font-semibold rounded-lg transition-colors w-max whitespace-nowrap"
                   >
                     <LogOut className="w-4 h-4" />
                     Logout
@@ -152,12 +152,12 @@ const ProfilePage = () => {
               )}
             </div>
             
-            <div className="flex items-center gap-6 mb-4 text-sm">
-              <div><span className="font-semibold">{posts.length}</span> posts</div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:gap-x-6 mb-4 text-sm">
+              <div className="whitespace-nowrap"><span className="font-semibold">{posts.length}</span> posts</div>
               {user.rollNo && user.role === 'Student' && (
-                <div className="text-gray-500">{user.rollNo}</div>
+                <div className="text-gray-500 whitespace-nowrap">{user.rollNo}</div>
               )}
-              <div className="text-gray-500 capitalize">{user.role}</div>
+              <div className="text-gray-500 capitalize whitespace-nowrap">{user.role}</div>
             </div>
             
             <div className="text-sm">

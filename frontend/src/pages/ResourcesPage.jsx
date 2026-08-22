@@ -93,9 +93,13 @@ export default function ResourcesPage() {
     }, 150);
   };
 
+  // overflow-x-hidden clips the decorative blobs below: they sit past the
+  // container edge (right-0 with -mr-20), which otherwise widens the page
+  // beyond the viewport. The layout then scrolls sideways, shifting content
+  // and leaving a blank strip down the side on phones.
   return (
     <div
-      className="relative min-h-screen w-full flex flex-col transition-colors duration-300"
+      className="relative min-h-screen w-full flex flex-col transition-colors duration-300 overflow-x-hidden"
       style={{
         background: 'linear-gradient(145deg, #fdfbf7 0%, #f9f5ed 45%, #f4ede2 100%)',
       }}
