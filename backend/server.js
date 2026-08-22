@@ -52,11 +52,12 @@ const connectDB = async () => {
 // ── 3. Express Middleware ──────────────────────────────────────────────────
 // CLIENT_URL can be a single URL or a comma-separated list of allowed origins.
 // e.g. on Render: CLIENT_URL=https://campus-buzz.onrender.com,http://localhost:3000
-const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
+const configuredOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
   .split(',')
   .map(o => o.trim().replace(/\/$/, ''))  // normalise: strip trailing slash
   .filter(Boolean);
 
+<<<<<<< Updated upstream
 if (process.env.NODE_ENV !== 'production') {
   // In dev, also allow the frontend (3000) and the backend's own origin,
   // because CRA's proxy forwards requests with origin = backend URL.
@@ -73,16 +74,28 @@ if (process.env.NODE_ENV !== 'production') {
     if (!allowedOrigins.includes(url)) allowedOrigins.push(url);
   });
 }
+=======
+const isOriginAllowed = (origin) => {
+  if (!origin) return true; // Allow non-browser requests (curl, server-to-server, mobile apps)
+  const normalised = origin.replace(/\/$/, '');
+  if (configuredOrigins.includes(normalised)) return true;
+  // In dev, allow any localhost or 127.0.0.1 origin (e.g. 3000, 5000, etc.)
+  if (process.env.NODE_ENV !== 'production') {
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalised)) {
+      return true;
+    }
+  }
+  return false;
+};
+>>>>>>> Stashed changes
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (server-to-server, curl, mobile apps)
-      if (!origin) return callback(null, true);
-      // Normalise the incoming origin by stripping any trailing slash
-      const normalised = origin.replace(/\/$/, '');
-      if (allowedOrigins.includes(normalised)) return callback(null, true);
-      callback(new Error(`CORS: origin "${origin}" not allowed.`));
+      if (isOriginAllowed(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
     },
     credentials: true,
   })
