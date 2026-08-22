@@ -236,6 +236,8 @@ POST /api/posts
 }
 ```
 
+> `imageUrl` is **optional** — omit it (or send an empty string) to create a text-only post. `title`, `description` and `hashtag` are required.
+
 For `#foodsplit` / `#cabsplit` — also include:
 ```json
 { "expiresAt": "2026-06-28T06:00:00Z" }

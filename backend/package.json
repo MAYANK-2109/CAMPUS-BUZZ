@@ -1,12 +1,13 @@
 {
   "name": "campus-buzz-backend",
   "version": "1.0.0",
-  "description": "Campus Buzz backend – Express + Socket.io + MongoDB",
+  "description": "Campus Buzz backend \u2013 Express + Socket.io + MongoDB",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev:db": "node scripts/dev-db.js"
   },
   "keywords": [],
   "author": "",
@@ -25,6 +26,7 @@
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
+    "mongodb-memory-server": "^11.2.0",
     "nodemon": "^3.1.9"
   }
 }

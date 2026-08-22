@@ -33,3 +33,6 @@ coverage/
 *.sln
 *.sw?
 .DS_Store
+
+# Local dev MongoDB data (scripts/dev-db.js)
+backend/.mongo-data/

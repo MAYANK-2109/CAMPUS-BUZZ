@@ -34,10 +34,11 @@ const PostSchema = new mongoose.Schema(
       maxlength: [2000, 'Description cannot exceed 2000 characters'],
     },
 
+    /** Optional image URL. Posts without an image render text-only. */
     imageUrl: {
-      type:     String,
-      required: [true, 'Every post must include an image'],
-      trim:     true,
+      type:    String,
+      trim:    true,
+      default: null,
     },
 
     author: {

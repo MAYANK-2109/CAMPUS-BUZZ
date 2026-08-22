@@ -98,7 +98,6 @@ const CreatePostForm = ({ onPostCreated, onClose, isClubOrAdmin = false }) => {
     setError('');
     if (!form.title.trim() || !form.description.trim()) return setError('Title & description are required.');
     if (!form.hashtag) return setError('You must select a primary hashtag.');
-    if (!form.imageUrl?.trim()) return setError('An image URL is required.');
     if (TIMED.has(form.hashtag) && !form.expiresAt) return setError(`Expiry time required for ${form.hashtag}.`);
 
     setLoading(true);
@@ -109,7 +108,7 @@ const CreatePostForm = ({ onPostCreated, onClose, isClubOrAdmin = false }) => {
         description: form.description.trim(),
         hashtag: form.hashtag,
         customTags,
-        ...(form.imageUrl && { imageUrl: form.imageUrl.trim() }),
+        ...(form.imageUrl.trim() && { imageUrl: form.imageUrl.trim() }),
         ...(TIMED.has(form.hashtag) && { expiresAt: form.expiresAt }),
         ...(form.hashtag === '#cabsplit' && form.totalFare && { totalFare: Number(form.totalFare) }),
         ...(form.linkedEvent && { linkedEvent: form.linkedEvent }),

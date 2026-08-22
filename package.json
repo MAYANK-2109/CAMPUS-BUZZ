@@ -1,0 +1,15 @@
+{
+  "name": "campus-buzz",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Campus Buzz – monorepo root (backend + frontend)",
+  "scripts": {
+    "postinstall": "npm run install:all",
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend start",
+    "start:backend": "npm --prefix backend start",
+    "build:frontend": "npm --prefix frontend run build"
+  },
+  "license": "ISC"
+}

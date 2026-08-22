@@ -23,6 +23,9 @@ const { emitNotifications } = require('../socket');
 // ── Allowed time-sensitive hashtags that need an expiresAt ───────────────────
 const TIMED_HASHTAGS = new Set(['#foodsplit', '#cabsplit']);
 
+// ── Hashtags that get a Socket.io chat room (mirrors socket/index.js) ────────
+const CHAT_HASHTAGS = new Set(['#foodsplit', '#cabsplit', '#resell']);
+
 // ── Feed-ranking constants (tunable via env or query params) ──────────────────
 const DEFAULT_G = 0.8;   // gravity   – higher = popularity wins more
 const DEFAULT_H = 12;    // half-life – hours after which time-boost halves
@@ -174,13 +177,7 @@ exports.createPost = async (req, res) => {
   try {
     const { title, description, imageUrl, hashtag, expiresAt, customTags, totalFare } = req.body;
 
-    // Enforce that every post must have an image
-    if (!imageUrl || !imageUrl.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Every post must include an image.',
-      });
-    }
+    // imageUrl is optional — posts without an image render as text-only.
 
     // Enforce that every post must have a hashtag
     if (!hashtag || hashtag === 'None') {
@@ -226,7 +223,7 @@ exports.createPost = async (req, res) => {
     const post = await Post.create({
       title,
       description,
-      imageUrl:   imageUrl || null,
+      imageUrl:   imageUrl?.trim() || null,
       author:     req.user._id,
       hashtag:    hashtag,
       customTags: Array.isArray(customTags) ? customTags : [],
