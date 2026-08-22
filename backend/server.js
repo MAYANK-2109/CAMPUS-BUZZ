@@ -30,6 +30,7 @@ const mongoose  = require('mongoose');
 const routes    = require('./routes/index');
 const { initSocket }          = require('./socket/index');
 const { startPostExpiryCron } = require('./cron/postExpiry');
+const { startSeatExpiryCron } = require('./cron/seatExpiry');
 const rateLimit               = require('express-rate-limit');
 
 const app        = express();
@@ -156,6 +157,7 @@ const HOST = process.env.HOST || null;
 connectDB().then(() => {
   // Cron job requires an active DB connection
   startPostExpiryCron();
+  startSeatExpiryCron();
 
   const onListening = () => {
     console.log(`\n🚀 Campus Buzz backend running on port ${PORT}`);

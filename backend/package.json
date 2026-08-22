@@ -1,7 +1,7 @@
 {
   "name": "campus-buzz-backend",
   "version": "1.0.0",
-  "description": "Campus Buzz backend \u2013 Express + Socket.io + MongoDB",
+  "description": "Campus Buzz backend – Express + Socket.io + MongoDB",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -23,6 +23,7 @@
     "mongoose": "^8.9.1",
     "node-cron": "^3.0.3",
     "nodemailer": "^9.0.1",
+    "qrcode": "^1.5.4",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {

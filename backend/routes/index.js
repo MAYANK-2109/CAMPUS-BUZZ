@@ -41,6 +41,7 @@ const eventController         = require('../controllers/eventController');
 const complaintController     = require('../controllers/complaintController');
 const interactionController   = require('../controllers/interactionController');
 const notificationController  = require('../controllers/notificationController');
+const libraryController       = require('../controllers/libraryController');
 const userRoutes              = require('./userRoutes');
 
 // ── Model imports for inline route handlers ────────────────────────────────────
@@ -780,5 +781,43 @@ router.post('/announcements/:id/seen', protect, async (req, res) => {
     return res.status(500).json({ success: false });
   }
 });
+
+// ════════════════════════════════════════════════════════════════════════════════
+// LIBRARY routes  (/api/library/…)
+//
+// All routes sit behind `protect`, i.e. the same JWT the rest of Campus Buzz
+// uses — a student already signed in never logs in again for the library.
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ── Student ──────────────────────────────────────────────────────────────────
+router.get('/library/slots',        protect, libraryController.getSlots);
+router.get('/library/bookings/me',  protect, libraryController.getMyBookings);
+
+// Admin listing must be registered before nothing else conflicts, but note
+// /library/bookings/me is declared above so it is not shadowed by /:id routes.
+router.post('/library/bookings',                protect, libraryController.createBooking);
+router.patch('/library/bookings/:id/cancel',    protect, libraryController.cancelBooking);
+router.patch('/library/bookings/:id/check-in',  protect, libraryController.checkIn);
+
+// ── Seat holds (30s checkout window) ─────────────────────────────────────────
+router.post('/library/holds',   protect, libraryController.holdSeat);
+router.delete('/library/holds', protect, libraryController.releaseHold);
+
+// ── Digital library ID (QR) ──────────────────────────────────────────────────
+router.get('/library/id-card',   protect, libraryController.getIdCard);
+router.post('/library/verify-id', protect, adminOnly, libraryController.verifyIdCard);
+
+// ── Admin: seats ─────────────────────────────────────────────────────────────
+// Declared before GET /library/seats so the adminOnly guard is not bypassed by
+// method — Express matches on method + path, so both can share the path.
+router.post('/library/seats',       protect, adminOnly, libraryController.createSeats);
+router.patch('/library/seats/:id',  protect, adminOnly, libraryController.updateSeat);
+router.delete('/library/seats/:id', protect, adminOnly, libraryController.deleteSeat);
+
+router.get('/library/seats',        protect, libraryController.getSeats);
+
+// ── Admin: oversight ─────────────────────────────────────────────────────────
+router.get('/library/bookings',     protect, adminOnly, libraryController.getAllBookings);
+router.get('/library/stats',        protect, adminOnly, libraryController.getStats);
 
 module.exports = router;

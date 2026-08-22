@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Bookmark, Grid3x3, LogOut } from 'lucide-react';
+import { Bookmark, Grid3x3, LogOut, BookOpen, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
@@ -222,6 +222,31 @@ const ProfilePage = () => {
             </div>
           </div>
         )}
+
+        {/* ── Campus services ──────────────────────────────────────────────
+            Entry point to the library seat-reservation system. It routes
+            in-app, so the student's existing session carries over and no
+            second login is required. */}
+        <div className="mb-8">
+          <h2 className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">
+            Campus Services
+          </h2>
+          <button
+            onClick={() => navigate('/library')}
+            className="w-full flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-xl hover:border-indigo-300 hover:shadow-sm transition-all text-left group"
+          >
+            <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-100 transition-colors">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-gray-900 text-sm">Library</div>
+              <div className="text-xs text-gray-500 mt-0.5">
+                Reserve a study seat — check live availability and manage your bookings
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition-colors flex-shrink-0" />
+          </button>
+        </div>
 
         <div className="border-t border-gray-200">
           <div className="flex">

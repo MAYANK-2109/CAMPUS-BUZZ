@@ -197,6 +197,14 @@ const initSocket = (httpServer) => {
     });
 
     // ═══════════════════════════════════════════════════════════════════════════
+    //  LIBRARY SEAT GRID
+    //  Clients viewing the seat map join one shared room and receive
+    //  `librarySeatUpdate` whenever a seat is booked or released.
+    // ═══════════════════════════════════════════════════════════════════════════
+    socket.on('joinLibrary',  () => socket.join('library'));
+    socket.on('leaveLibrary', () => socket.leave('library'));
+
+    // ═══════════════════════════════════════════════════════════════════════════
     //  GLOBAL HUB ROOM EVENTS  (new)
     // ═══════════════════════════════════════════════════════════════════════════
 

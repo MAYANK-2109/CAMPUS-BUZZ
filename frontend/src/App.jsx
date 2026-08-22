@@ -28,6 +28,7 @@ import ProfilePage        from './pages/ProfilePage';
 import UserProfilePage    from './pages/UserProfilePage';
 import NotificationsPage  from './pages/NotificationsPage';
 import ChatHubPage        from './pages/ChatHubPage';
+import LibraryPage        from './pages/LibraryPage';
 
 /**
  * AuthLayout: wraps protected pages in the full 3-column shell.
@@ -126,6 +127,17 @@ const App = () => (
               <ProtectedRoute>
                 <AuthLayout>
                   <UserProfilePage />
+                </AuthLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/library"
+            element={
+              <ProtectedRoute>
+                <AuthLayout>
+                  <LibraryPage />
                 </AuthLayout>
               </ProtectedRoute>
             }
