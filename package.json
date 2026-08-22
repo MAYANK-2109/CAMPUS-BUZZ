@@ -4,7 +4,7 @@
   "private": true,
   "description": "Campus Buzz – monorepo root (backend + frontend)",
   "scripts": {
-    "postinstall": "npm run install:all",
+    "//": "No postinstall here on purpose. A host that installs from the repo root (Render, Railway) would otherwise pull the frontend's full toolchain into a backend deploy. Run `npm run install:all` by hand for local setup.",
     "install:all": "npm --prefix backend install && npm --prefix frontend install",
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend start",
