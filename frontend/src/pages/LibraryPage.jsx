@@ -22,24 +22,40 @@ import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 
-// ── Date helpers (local wall-clock, matching the backend) ────────────────────
-const toKey = (d) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// ── Date helpers — India Standard Time, matching the backend ─────────────────
+// Slots are campus wall-clock times, so the calendar must be IST regardless of
+// where the viewer's device thinks it is. A student abroad, or one with a
+// mis-set clock, still sees the same campus days the server is booking against.
+const IST_TIMEZONE = 'Asia/Kolkata';
+
+// en-CA renders as YYYY-MM-DD, the key format the API expects.
+const IST_DATE_FMT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: IST_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+});
+const IST_LABEL_FMT = new Intl.DateTimeFormat('en-GB', {
+  timeZone: IST_TIMEZONE, weekday: 'short', day: 'numeric', month: 'short',
+});
+
+const toKey = (d = new Date()) => IST_DATE_FMT.format(d);
+
+const istLabelParts = (d) => {
+  const p = Object.fromEntries(
+    IST_LABEL_FMT.formatToParts(d).map(part => [part.type, part.value])
+  );
+  return { day: p.weekday, num: p.day, month: p.month };
+};
 
 const MAX_ADVANCE_DAYS = 7;
 
-const upcomingDates = () =>
-  Array.from({ length: MAX_ADVANCE_DAYS + 1 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    return {
-      key:   toKey(d),
-      day:   d.toLocaleDateString(undefined, { weekday: 'short' }),
-      num:   d.getDate(),
-      month: d.toLocaleDateString(undefined, { month: 'short' }),
-      isToday: i === 0,
-    };
+const upcomingDates = () => {
+  const todayKey = toKey();
+  return Array.from({ length: MAX_ADVANCE_DAYS + 1 }, (_, i) => {
+    // Step in whole days from now; the IST formatter resolves each to the right
+    // campus date even when the device is on another side of the date line.
+    const d = new Date(Date.now() + i * 86400000);
+    return { key: toKey(d), ...istLabelParts(d), isToday: toKey(d) === todayKey };
   });
+};
 
 const SEAT_TYPE_LABEL = {
   regular:    'Regular',
@@ -59,6 +75,7 @@ const LibraryPage = () => {
   const [slotId, setSlotId] = useState(null);
 
   const [slots, setSlots] = useState([]);
+  const [dayBooking, setDayBooking] = useState(null); // unfinished booking on the selected date
   const [seats, setSeats] = useState([]);
   const [myBookings, setMyBookings] = useState([]);
 
@@ -91,6 +108,7 @@ const LibraryPage = () => {
       .then(({ data }) => {
         if (cancelled) return;
         setSlots(data.data || []);
+        setDayBooking(data.myBooking || null);
         // Default to the first slot that has not already ended.
         setSlotId(prev => {
           const stillValid = (data.data || []).some(s => s.id === prev && !s.isPast);
@@ -232,6 +250,11 @@ const LibraryPage = () => {
     try {
       await api.patch(`/library/bookings/${bookingId}/cancel`);
       setNotice('Booking cancelled.');
+      // The day-level lock may have just lifted — re-read the slot grid.
+      setDayBooking(null);
+      api.get(`/library/slots?date=${date}`)
+        .then(({ data }) => { setSlots(data.data || []); setDayBooking(data.myBooking || null); })
+        .catch(() => {});
       setSeats(prev => prev.map(s =>
         s._id === seatId ? { ...s, isBooked: false, isMine: false, bookingId: undefined } : s
       ));
@@ -328,7 +351,7 @@ const LibraryPage = () => {
   const mySeatThisSlot = seats.find(s => s.isMine);
 
   const upcoming = myBookings.filter(
-    b => b.date >= toKey(new Date()) && ['booked', 'checked_in'].includes(b.status)
+    b => b.date >= toKey() && ['booked', 'checked_in'].includes(b.status)
   );
 
   return (
@@ -387,7 +410,10 @@ const LibraryPage = () => {
             ))}
           </div>
 
-          <div className="lib-section-label"><Clock size={13} /> Time slot</div>
+          <div className="lib-section-label">
+            <Clock size={13} /> Time slot
+            <span className="lib-tz-note">all times IST</span>
+          </div>
           {loadingSlots ? (
             <div className="lib-muted">Loading slots…</div>
           ) : (
@@ -395,17 +421,42 @@ const LibraryPage = () => {
               {slots.map(s => (
                 <button
                   key={s.id}
-                  disabled={s.isPast}
-                  className={`lib-slot ${slotId === s.id ? 'lib-slot--active' : ''} ${s.isPast ? 'lib-slot--past' : ''}`}
+                  disabled={s.isPast || s.blocked}
+                  className={`lib-slot ${slotId === s.id ? 'lib-slot--active' : ''} ${s.isPast ? 'lib-slot--past' : ''} ${s.blocked ? 'lib-slot--blocked' : ''} ${s.isMine ? 'lib-slot--mine' : ''}`}
                   onClick={() => setSlotId(s.id)}
-                  title={s.isPast ? 'This slot has ended' : `${s.available} of ${s.totalSeats} free`}
+                  title={
+                    s.isPast   ? 'This slot has ended'
+                    : s.isMine  ? `Your seat ${dayBooking?.seatCode} is booked for this slot`
+                    : s.blocked ? `Locked until your ${dayBooking?.slot?.label} booking ends`
+                    : `${s.available} of ${s.totalSeats} free`
+                  }
                 >
                   <span className="lib-slot-label">{s.label}</span>
                   <span className="lib-slot-meta">
-                    {s.isPast ? 'ended' : `${s.available} free`}
+                    {s.isPast   ? 'ended'
+                     : s.isMine  ? `yours · ${dayBooking?.seatCode || ''}`
+                     : s.blocked ? 'locked'
+                     : `${s.available} free`}
                   </span>
                 </button>
               ))}
+            </div>
+          )}
+
+          {dayBooking && (
+            <div className="lib-own-banner" style={{ marginTop: 12 }}>
+              <Clock size={14} />
+              <span>
+                You have <strong>{dayBooking.seatCode}</strong> booked for{' '}
+                <strong>{dayBooking.slot?.label}</strong> on this day. Other slots today
+                unlock once that one ends — other dates are unaffected.
+              </span>
+              <button
+                className="lib-btn lib-btn--danger"
+                onClick={() => cancel(dayBooking.bookingId, null)}
+              >
+                Cancel it
+              </button>
             </div>
           )}
 
@@ -603,7 +654,7 @@ const LibraryPage = () => {
             <div className="lib-empty"><Ticket size={34} /><p>No bookings yet.</p></div>
           ) : myBookings.map(b => {
             const active = ['booked', 'checked_in'].includes(b.status);
-            const isToday = b.date === toKey(new Date());
+            const isToday = b.date === toKey();
             return (
               <div key={b._id} className={`lib-booking ${active ? '' : 'lib-booking--done'}`}>
                 <div className="lib-booking-seat">{b.seat?.code || '—'}</div>

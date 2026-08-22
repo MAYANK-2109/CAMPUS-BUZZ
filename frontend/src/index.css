@@ -1788,3 +1788,19 @@
 }
 .lib-own-banner span { flex: 1; min-width: 180px; }
 .lib-own-banner strong { font-weight: 700; }
+
+/* Slot locked by the viewer's own unfinished booking that day */
+.lib-slot--blocked {
+  opacity: 0.5; cursor: not-allowed; background: #f9fafb;
+  border-style: dashed;
+}
+.lib-slot--mine {
+  background: #eef2ff; border-color: #818cf8;
+}
+.lib-slot--mine .lib-slot-meta { color: #4338ca; font-weight: 600; }
+
+/* "all times IST" hint beside the slot heading */
+.lib-tz-note {
+  margin-left: auto; font-size: 10.5px; font-weight: 600;
+  color: #9ca3af; text-transform: none; letter-spacing: 0;
+}

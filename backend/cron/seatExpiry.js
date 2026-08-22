@@ -16,21 +16,14 @@
 const cron        = require('node-cron');
 const SeatBooking = require('../models/SeatBooking');
 
-// Local wall-clock date key — must match the controller's definition.
-const todayKey = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
-const toMinutes = (hhmm) => {
-  const [h, m] = hhmm.split(':').map(Number);
-  return h * 60 + m;
-};
+// Shared with the controller so the cron and the API can never disagree about
+// when a slot ended. Always IST — see utils/istTime.js.
+const { todayKey, nowMinutes, toMinutes } = require('../utils/istTime');
 
 const retireFinishedBookings = async () => {
   try {
     const today   = todayKey();
-    const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
+    const nowMins = nowMinutes();
 
     // Slots that have already ended today.
     const endedToday = SeatBooking.SLOTS

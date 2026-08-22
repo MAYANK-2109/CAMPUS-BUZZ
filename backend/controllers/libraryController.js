@@ -28,39 +28,60 @@ const SeatHold    = require('../models/SeatHold');
 const SLOTS = SeatBooking.SLOTS;
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
-// The library day is a wall-clock day on campus. Build "YYYY-MM-DD" from local
-// parts rather than toISOString(), which would shift the date across UTC.
-const toDateKey = (d) => {
-  const yyyy = d.getFullYear();
-  const mm   = String(d.getMonth() + 1).padStart(2, '0');
-  const dd   = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-};
-
-const todayKey = () => toDateKey(new Date());
-
-const isValidDateKey = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
-
-/** Minutes since midnight for a "HH:MM" string */
-const toMinutes = (hhmm) => {
-  const [h, m] = hhmm.split(':').map(Number);
-  return h * 60 + m;
-};
-
-/** Has this slot already ended, on this date, right now? */
-const slotHasPassed = (dateKey, slot) => {
-  const today = todayKey();
-  if (dateKey > today) return false;   // future date
-  if (dateKey < today) return true;    // past date
-  const now = new Date();
-  return (now.getHours() * 60 + now.getMinutes()) >= toMinutes(slot.end);
-};
+// All of these read the clock in India Standard Time, never the server's local
+// time — see utils/istTime.js for why that distinction is load-bearing.
+const {
+  toDateKey,
+  todayKey,
+  toMinutes,
+  isValidDateKey,
+  slotHasPassed,
+  daysBetween,
+} = require('../utils/istTime');
 
 // How far ahead students may book.
 const MAX_ADVANCE_DAYS = 7;
 
-const daysBetween = (aKey, bKey) =>
-  Math.round((Date.parse(bKey) - Date.parse(aKey)) / 86_400_000);
+/**
+ * One unfinished booking per day.
+ *
+ * A student may not take a second slot on a date while their existing slot on
+ * that date has not yet ended — the point of a seat booking is to be sitting in
+ * it, so holding two live slots on one day just denies seats to everyone else.
+ * Once the slot's end time passes they are free to book again that same day.
+ *
+ * Deliberately scoped to a single date: other days are never affected, so
+ * booking ahead for the rest of the week still works normally.
+ *
+ * Returns the blocking booking (populated with its seat), or null.
+ */
+const findUnfinishedBookingOnDate = async (userId, date) => {
+  const active = await SeatBooking.find({
+    user:   userId,
+    date,
+    status: { $in: SeatBooking.ACTIVE_STATUSES },
+  }).populate('seat', 'code floor section');
+
+  return active.find(b => {
+    const slot = SeatBooking.getSlot(b.slotId);
+    return slot && !slotHasPassed(date, slot);
+  }) || null;
+};
+
+/** Consistent refusal payload for the rule above. */
+const blockedByBookingResponse = (res, blocking, sameSlot) => {
+  const slot = SeatBooking.getSlot(blocking.slotId);
+  return res.status(409).json({
+    success:  false,
+    reason:   sameSlot ? 'own_booking' : 'day_in_progress',
+    seatCode: blocking.seat?.code,
+    slotId:   blocking.slotId,
+    message:  sameSlot
+      ? `You already have seat ${blocking.seat?.code} booked for this slot. Cancel it first to move seats.`
+      : `You already have seat ${blocking.seat?.code} booked for ${slot?.label} on this day. `
+        + `You can book another slot here once that one ends — or pick a different date.`,
+  });
+};
 
 /** Broadcast a seat-grid change so open clients update without polling. */
 const emitSeatUpdate = (payload) => {
@@ -85,18 +106,41 @@ exports.getSlots = async (req, res) => {
     ]);
     const takenBySlot = Object.fromEntries(counts.map(c => [c._id, c.taken]));
 
+    // If the viewer already has an unfinished booking on this date, every other
+    // slot that day is closed to them — tell the client so it can grey them out
+    // instead of letting the student click into a refusal.
+    const blocking = await findUnfinishedBookingOnDate(req.user._id, date);
+
     const data = SLOTS.map(s => {
-      const taken = takenBySlot[s.id] || 0;
+      const taken  = takenBySlot[s.id] || 0;
+      const isPast = slotHasPassed(date, s);
+      const isMine = blocking?.slotId === s.id;
       return {
         ...s,
         taken,
         available: Math.max(0, totalSeats - taken),
         totalSeats,
-        isPast: slotHasPassed(date, s),
+        isPast,
+        isMine,
+        // Blocked only by *another* live booking of ours on the same day.
+        blocked: !!blocking && !isMine && !isPast,
       };
     });
 
-    return res.json({ success: true, date, totalSeats, data });
+    return res.json({
+      success: true,
+      date,
+      totalSeats,
+      data,
+      myBooking: blocking
+        ? {
+            bookingId: blocking._id,
+            slotId:    blocking.slotId,
+            slot:      SeatBooking.getSlot(blocking.slotId),
+            seatCode:  blocking.seat?.code,
+          }
+        : null,
+    });
   } catch (err) {
     console.error('[library.getSlots]', err);
     return res.status(500).json({ success: false, message: 'Failed to load slots.' });
@@ -205,20 +249,13 @@ exports.holdSeat = async (req, res) => {
       return res.status(409).json({ success: false, message: 'That seat is already booked for this slot.' });
     }
 
-    // Do we already hold a seat in this slot? Checking here rather than only at
-    // confirm time matters: without it the student is granted a hold, watches a
-    // 30-second countdown, and is refused at the last click — while that hold
-    // needlessly blocks the seat for everyone else.
-    const ownSeat = await SeatBooking.findOne({
-      user: req.user._id, date, slotId, status: { $in: SeatBooking.ACTIVE_STATUSES },
-    }).populate('seat', 'code');
-    if (ownSeat) {
-      return res.status(409).json({
-        success: false,
-        reason: 'own_booking',
-        seatCode: ownSeat.seat?.code,
-        message: `You already have seat ${ownSeat.seat?.code || ''} booked for this slot. Cancel it first to move seats.`.replace('  ', ' '),
-      });
+    // Do we already have an unfinished booking on this day? Checked here rather
+    // than only at confirm time: without it the student is granted a hold,
+    // watches a 30-second countdown and is refused at the last click — while
+    // that hold needlessly blocks the seat for everyone else.
+    const blocking = await findUnfinishedBookingOnDate(req.user._id, date);
+    if (blocking) {
+      return blockedByBookingResponse(res, blocking, blocking.slotId === slotId);
     }
 
     const now       = new Date();
@@ -326,6 +363,13 @@ exports.createBooking = async (req, res) => {
     const seat = await LibrarySeat.findById(seatId);
     if (!seat || !seat.isActive) {
       return res.status(404).json({ success: false, message: 'Seat not found.' });
+    }
+
+    // Same rule enforced at booking time — the hold endpoint is a convenience,
+    // not a gate; a client can POST straight here.
+    const blocking = await findUnfinishedBookingOnDate(req.user._id, date);
+    if (blocking) {
+      return blockedByBookingResponse(res, blocking, blocking.slotId === slotId);
     }
 
     // Respect a live hold belonging to someone else. This is a courtesy check
