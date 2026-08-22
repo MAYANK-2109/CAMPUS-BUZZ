@@ -226,6 +226,7 @@ router.get('/clubs', protect, async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════════
 const ChatRoom = require('../models/ChatRoom');
 const Message  = require('../models/Message');
+const { emitNotifications } = require('../socket');
 
 // ── Legacy: close a post-linked room ─────────────────────────────────────────
 router.patch('/chat-rooms/:postId/close', protect, async (req, res) => {
@@ -278,14 +279,42 @@ router.get('/rooms', protect, async (req, res) => {
         hashtag: r.postId.hashtag || '#resell',
       }));
 
-    // Attach a tag so the frontend knows these are global
+    // Attach a tag so the frontend knows these are global, plus this viewer's
+    // access state so the room list can render Open / Request / Pending without
+    // a follow-up call per room. joinRequests itself is never sent to
+    // non-creators — it would leak who else asked to join.
+    const meId = req.user._id.toString();
     const normalisedGlobalRooms = globalRooms
       .filter(Boolean)
-      .map(r => ({
-        ...r,
-        _roomType: 'global',
-        createdBy: r.createdBy || { displayName: 'System' }
-      }));
+      .map(r => {
+        const creatorId = r.createdBy?._id ? r.createdBy._id.toString() : null;
+        const isCreator = creatorId === meId;
+        const myRequest = (r.joinRequests || []).find(
+          jr => jr.user && jr.user.toString() === meId
+        );
+
+        let myAccess = 'open';
+        if (r.requiresApproval) {
+          if (isCreator)                    myAccess = 'creator';
+          else if (req.user.role === 'Admin') myAccess = 'admin';
+          else if (!myRequest)              myAccess = 'none';
+          else                              myAccess = myRequest.status;
+        }
+
+        const { joinRequests, ...rest } = r;
+        return {
+          ...rest,
+          _roomType: 'global',
+          createdBy: r.createdBy || { displayName: 'System' },
+          requiresApproval: !!r.requiresApproval,
+          myAccess,
+          canEnter: !r.requiresApproval || ['creator', 'admin', 'approved'].includes(myAccess),
+          // Only the creator (or a site Admin) sees the pending badge count
+          pendingCount: (isCreator || req.user.role === 'Admin')
+            ? (joinRequests || []).filter(jr => jr.status === 'pending').length
+            : undefined,
+        };
+      });
 
     return res.json({ success: true, data: [...normalisedGlobalRooms, ...normalisedPostRooms] });
   } catch (err) {
@@ -306,7 +335,13 @@ router.post('/rooms', protect, async (req, res) => {
     if (!name?.trim()) {
       return res.status(400).json({ success: false, message: 'Room name is required.' });
     }
-    const slug = hashtag?.trim() || '#general';
+
+    const slug = hashtag?.trim() || ChatRoom.APPROVAL_HASHTAG;
+
+    // Any category may be created. Only #general rooms are approval-gated —
+    // there the creator admits members one by one; every other category stays
+    // open to all, exactly as before.
+    const gated = slug === ChatRoom.APPROVAL_HASHTAG;
 
     const room = await ChatRoom.create({
       isGlobal:      true,
@@ -315,10 +350,26 @@ router.post('/rooms', protect, async (req, res) => {
       createdBy:     req.user._id,
       isActive:      true,
       lastMessageAt: new Date(),
+      requiresApproval: gated,
+      participants:     [req.user._id],
     });
 
     await room.populate('createdBy', 'displayName avatarUrl role');
-    return res.status(201).json({ success: true, data: room });
+
+    // Mirror the shape of GET /rooms so the client can drop this straight into
+    // its list — without myAccess/canEnter the creator's own new room would
+    // render as if they had no access to it.
+    return res.status(201).json({
+      success: true,
+      data: {
+        ...room.toObject(),
+        _roomType:        'global',
+        requiresApproval: gated,
+        myAccess:         gated ? 'creator' : 'open',
+        canEnter:         true,
+        pendingCount:     0,
+      },
+    });
   } catch (err) {
     console.error('[POST /rooms]', err);
     return res.status(500).json({ success: false, message: 'Failed to create room.' });
@@ -384,6 +435,13 @@ router.get('/rooms/:id/messages', protect, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Room not found.' });
     }
 
+    // Approval-gated rooms: only the creator, a site Admin, or an approved
+    // member may read history.
+    const access = room.canAccess(req.user._id, req.user.role);
+    if (!access.allowed) {
+      return res.status(403).json({ success: false, message: access.reason, status: access.status });
+    }
+
     const messages = await Message.find({ roomId: room._id })
       .sort({ timestamp: -1 })
       .limit(60)
@@ -394,6 +452,186 @@ router.get('/rooms/:id/messages', protect, async (req, res) => {
   } catch (err) {
     console.error('[GET /rooms/:id/messages]', err);
     return res.status(500).json({ success: false, message: 'Failed to fetch messages.' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// ROOM JOIN REQUESTS  — approval flow for user-created (#general) rooms
+//
+//   POST  /api/rooms/:id/join-request              – ask to join
+//   GET   /api/rooms/:id/join-requests             – creator lists requests
+//   PATCH /api/rooms/:id/join-requests/:userId     – creator approves/declines
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ── POST /api/rooms/:id/join-request ─────────────────────────────────────────
+router.post('/rooms/:id/join-request', protect, async (req, res) => {
+  try {
+    const room = await ChatRoom.findById(req.params.id);
+    if (!room || !room.isGlobal || !room.isActive) {
+      return res.status(404).json({ success: false, message: 'Room not found.' });
+    }
+    if (!room.requiresApproval) {
+      return res.status(400).json({ success: false, message: 'This room is open — no request needed.' });
+    }
+    if (room.isCreator(req.user._id)) {
+      return res.status(400).json({ success: false, message: 'You created this room.' });
+    }
+
+    const existing = room.findRequest(req.user._id);
+    if (existing) {
+      // Re-requesting is a no-op; a declined user must be re-invited by the
+      // creator rather than being able to spam a fresh request.
+      const messages = {
+        pending:  'Your request is already awaiting approval.',
+        approved: 'You are already a member of this room.',
+        declined: 'Your request to join this room was declined.',
+      };
+      return res.status(409).json({
+        success: false,
+        message: messages[existing.status],
+        status:  existing.status,
+      });
+    }
+
+    room.joinRequests.push({ user: req.user._id, status: 'pending' });
+    await room.save();
+
+    // Notify the room creator so the request surfaces outside the chat page too
+    if (room.createdBy) {
+      await emitNotifications([{
+        recipient: room.createdBy,
+        sender:    req.user._id,
+        type:      'join_request',
+        message:   `${req.user.displayName} asked to join "${room.name}".`,
+      }]);
+    }
+
+    // Live-push to the creator if they have the hub open
+    const io = global._io;
+    if (io && room.createdBy) {
+      io.to(`user:${room.createdBy.toString()}`).emit('joinRequestReceived', {
+        roomId:   room._id.toString(),
+        roomName: room.name,
+        user: {
+          _id:         req.user._id,
+          displayName: req.user.displayName,
+          avatarUrl:   req.user.avatarUrl || null,
+          rollNo:      req.user.rollNo || null,
+        },
+        requestedAt: new Date(),
+      });
+    }
+
+    return res.status(201).json({ success: true, status: 'pending', message: 'Request sent to the room creator.' });
+  } catch (err) {
+    console.error('[POST /rooms/:id/join-request]', err);
+    return res.status(500).json({ success: false, message: 'Failed to send join request.' });
+  }
+});
+
+// ── GET /api/rooms/:id/join-requests ─────────────────────────────────────────
+// Creator (or a site Admin) lists requests. ?status=pending to filter.
+router.get('/rooms/:id/join-requests', protect, async (req, res) => {
+  try {
+    const room = await ChatRoom.findById(req.params.id)
+      .populate('joinRequests.user', 'displayName avatarUrl role rollNo instituteEmail');
+
+    if (!room || !room.isGlobal) {
+      return res.status(404).json({ success: false, message: 'Room not found.' });
+    }
+    if (!room.isCreator(req.user._id) && req.user.role !== 'Admin') {
+      return res.status(403).json({ success: false, message: 'Only the room creator can view join requests.' });
+    }
+
+    let requests = (room.joinRequests || []).filter(r => r.user);
+    if (req.query.status) {
+      requests = requests.filter(r => r.status === req.query.status);
+    }
+    // Newest first
+    requests = requests.sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+
+    return res.json({
+      success:      true,
+      data:         requests,
+      pendingCount: (room.joinRequests || []).filter(r => r.status === 'pending').length,
+    });
+  } catch (err) {
+    console.error('[GET /rooms/:id/join-requests]', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch join requests.' });
+  }
+});
+
+// ── PATCH /api/rooms/:id/join-requests/:userId ───────────────────────────────
+// Body: { action: 'approve' | 'decline' }
+router.patch('/rooms/:id/join-requests/:userId', protect, async (req, res) => {
+  try {
+    const { action } = req.body;
+    if (!['approve', 'decline'].includes(action)) {
+      return res.status(400).json({ success: false, message: "action must be 'approve' or 'decline'." });
+    }
+
+    const room = await ChatRoom.findById(req.params.id);
+    if (!room || !room.isGlobal) {
+      return res.status(404).json({ success: false, message: 'Room not found.' });
+    }
+    if (!room.isCreator(req.user._id) && req.user.role !== 'Admin') {
+      return res.status(403).json({ success: false, message: 'Only the room creator can decide join requests.' });
+    }
+
+    const request = room.findRequest(req.params.userId);
+    if (!request) {
+      return res.status(404).json({ success: false, message: 'No join request from this user.' });
+    }
+    if (request.status !== 'pending') {
+      return res.status(409).json({
+        success: false,
+        message: `This request was already ${request.status}.`,
+        status:  request.status,
+      });
+    }
+
+    request.status    = action === 'approve' ? 'approved' : 'declined';
+    request.decidedAt = new Date();
+    request.decidedBy = req.user._id;
+
+    if (action === 'approve') {
+      const already = (room.participants || []).some(
+        p => p.toString() === req.params.userId.toString()
+      );
+      if (!already) room.participants.push(req.params.userId);
+    }
+    await room.save();
+
+    // Tell the requester what happened
+    await emitNotifications([{
+      recipient: req.params.userId,
+      sender:    req.user._id,
+      type:      action === 'approve' ? 'join_approved' : 'join_declined',
+      message:   action === 'approve'
+        ? `Your request to join "${room.name}" was approved.`
+        : `Your request to join "${room.name}" was declined.`,
+    }]);
+
+    const io = global._io;
+    if (io) {
+      io.to(`user:${req.params.userId.toString()}`).emit('joinRequestDecided', {
+        roomId:   room._id.toString(),
+        roomName: room.name,
+        status:   request.status,
+      });
+      // If they were declined while sitting in the room, evict them.
+      if (action === 'decline') {
+        io.to(room._id.toString()).emit('roomAccessRevoked', {
+          roomId: room._id.toString(),
+          userId: req.params.userId.toString(),
+        });
+      }
+    }
+
+    return res.json({ success: true, status: request.status, message: `Request ${request.status}.` });
+  } catch (err) {
+    console.error('[PATCH /rooms/:id/join-requests/:userId]', err);
+    return res.status(500).json({ success: false, message: 'Failed to update join request.' });
   }
 });
 

@@ -30,17 +30,31 @@ const initSocket = (httpServer) => {
   // CLIENT_URL can be comma-separated (e.g. "https://campus-buzz.onrender.com,http://localhost:3000")
   const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
     .split(',')
-    .map(o => o.trim())
+    .map(o => o.trim().replace(/\/$/, ''))   // normalise: strip trailing slash
     .filter(Boolean);
 
-  if (process.env.NODE_ENV !== 'production' && !allowedOrigins.includes('http://localhost:3000')) {
-    allowedOrigins.push('http://localhost:3000');
+  if (process.env.NODE_ENV !== 'production') {
+    // Mirror the dev origins allowed by the Express CORS config in server.js.
+    // Both hostname forms are listed because the dev server and the API may be
+    // reached as either localhost or 127.0.0.1, and they are distinct origins.
+    const devPort = process.env.PORT || 5000;
+    [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      `http://localhost:${devPort}`,
+      `http://127.0.0.1:${devPort}`,
+    ].forEach(url => {
+      if (!allowedOrigins.includes(url)) allowedOrigins.push(url);
+    });
   }
 
   const io = new Server(httpServer, {
     cors: {
       origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        if (!origin) return callback(null, true);
+        const normalised = origin.replace(/\/$/, '');
+        if (allowedOrigins.includes(normalised)) return callback(null, true);
+        console.warn(`[Socket.io] Rejected origin "${origin}". Allowed: ${allowedOrigins.join(', ')}`);
         callback(new Error(`CORS: socket origin "${origin}" not allowed.`));
       },
       credentials: true,
@@ -197,6 +211,18 @@ const initSocket = (httpServer) => {
         if (!room || !room.isGlobal) return socket.emit('roomError', { message: 'Room not found.' });
         if (!room.isActive)          return socket.emit('roomError', { message: 'This room is closed.' });
 
+        // ── Approval gate ─────────────────────────────────────────────────────
+        // Enforced here as well as on the REST route: the socket is a separate
+        // entry point, so a client could otherwise join a gated room directly.
+        const access = room.canAccess(socket.user._id, socket.user.role);
+        if (!access.allowed) {
+          return socket.emit('roomAccessDenied', {
+            roomId:  roomId,
+            status:  access.status,
+            message: access.reason,
+          });
+        }
+
         await ChatRoom.updateOne(
           { _id: room._id },
           { $addToSet: { participants: socket.user._id } }
@@ -262,6 +288,18 @@ const initSocket = (httpServer) => {
         const room = await ChatRoom.findById(roomId);
         if (!room || !room.isGlobal || !room.isActive) {
           return socket.emit('roomError', { message: 'Room is closed or not found.' });
+        }
+
+        // Re-check access on every message: a member can be declined or removed
+        // while they still hold an open socket in the room.
+        const access = room.canAccess(socket.user._id, socket.user.role);
+        if (!access.allowed) {
+          socket.leave(roomId);
+          return socket.emit('roomAccessDenied', {
+            roomId,
+            status:  access.status,
+            message: access.reason,
+          });
         }
 
         const message = await Message.create({

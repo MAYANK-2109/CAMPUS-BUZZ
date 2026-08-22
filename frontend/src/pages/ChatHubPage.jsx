@@ -18,7 +18,7 @@ import React, {
 } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
-import { Search, Plus, SendHorizonal, X, Hash, Users, MessageSquare, FileText, ExternalLink, ChevronRight, ChevronDown, ChevronLeft } from 'lucide-react';
+import { Search, Plus, SendHorizonal, X, Hash, Users, MessageSquare, FileText, ExternalLink, ChevronRight, ChevronDown, ChevronLeft, Lock, Check, Clock, UserPlus } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -168,14 +168,155 @@ const OnlineUsersPanel = ({ users, currentUserId }) => {
   );
 };
 
+// ── The one category whose rooms require creator approval (mirrors backend) ──
+// Rooms under every other hashtag are open to anyone.
+const APPROVAL_HASHTAG = '#general';
+
+/**
+ * ── Join Requests Panel ──────────────────────────────────────────────────────
+ * Shown to the room creator (the room's admin). Lists everyone who has asked
+ * to join and lets them approve or decline each request.
+ */
+const JoinRequestsPanel = ({ room, onClose, onDecided }) => {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [busyId, setBusyId]     = useState(null);
+  const [error, setError]       = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get(`/rooms/${room._id}/join-requests`);
+      setRequests(data.data || []);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to load requests.');
+    } finally {
+      setLoading(false);
+    }
+  }, [room._id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const decide = async (userId, action) => {
+    setBusyId(userId); setError('');
+    try {
+      await api.patch(`/rooms/${room._id}/join-requests/${userId}`, { action });
+      setRequests(prev => prev.map(r =>
+        (r.user?._id === userId)
+          ? { ...r, status: action === 'approve' ? 'approved' : 'declined' }
+          : r
+      ));
+      onDecided?.();
+    } catch (err) {
+      setError(err.response?.data?.message || `Failed to ${action} request.`);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const pending  = requests.filter(r => r.status === 'pending');
+  const decided  = requests.filter(r => r.status !== 'pending');
+
+  return (
+    <div className="ch-modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="ch-modal" style={{ maxWidth: 440 }}>
+        <div className="ch-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <UserPlus size={17} />
+          Join Requests
+          <button
+            onClick={onClose}
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#72767d', display: 'flex' }}
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ fontSize: 12, color: '#72767d', marginBottom: 12 }}>
+          {room.name}
+        </div>
+
+        {error && (
+          <div style={{ color: '#ed4245', fontSize: 13, marginBottom: 12, background: 'rgba(237,66,69,0.1)', padding: '8px 12px', borderRadius: 8 }}>
+            ⚠ {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ color: '#72767d', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>
+            Loading requests…
+          </div>
+        ) : requests.length === 0 ? (
+          <div style={{ color: '#9ca3af', fontSize: 13, padding: '24px 0', textAlign: 'center' }}>
+            No one has asked to join yet.
+          </div>
+        ) : (
+          <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+            {pending.map(r => (
+              <div key={r.user?._id} className="ch-request-row">
+                <div className="ch-request-avatar">
+                  {r.user?.avatarUrl
+                    ? <img src={r.user.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                    : (r.user?.displayName?.charAt(0)?.toUpperCase() || '?')}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="ch-request-name">{r.user?.displayName || 'Unknown'}</div>
+                  <div className="ch-request-meta">{r.user?.rollNo || r.user?.instituteEmail || ''}</div>
+                </div>
+                <button
+                  className="ch-request-btn ch-request-btn--approve"
+                  disabled={busyId === r.user?._id}
+                  onClick={() => decide(r.user._id, 'approve')}
+                >
+                  <Check size={13} /> Accept
+                </button>
+                <button
+                  className="ch-request-btn ch-request-btn--decline"
+                  disabled={busyId === r.user?._id}
+                  onClick={() => decide(r.user._id, 'decline')}
+                >
+                  <X size={13} /> Decline
+                </button>
+              </div>
+            ))}
+
+            {decided.length > 0 && (
+              <>
+                <div className="ch-rooms-section-label" style={{ marginTop: 14 }}>Decided</div>
+                {decided.map(r => (
+                  <div key={r.user?._id} className="ch-request-row" style={{ opacity: 0.65 }}>
+                    <div className="ch-request-avatar">
+                      {r.user?.displayName?.charAt(0)?.toUpperCase() || '?'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="ch-request-name">{r.user?.displayName || 'Unknown'}</div>
+                      <div className="ch-request-meta">{r.status}</div>
+                    </div>
+                    <span className={`ch-request-tag ch-request-tag--${r.status}`}>
+                      {r.status === 'approved' ? 'Accepted' : 'Declined'}
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ── Create Room Modal ─────────────────────────────────────────────────────────
 const CreateRoomModal = ({ onClose, onCreate }) => {
   const [name, setName] = useState('');
-  const [hashtag, setHashtag] = useState('#general');
+  const [hashtag, setHashtag] = useState(APPROVAL_HASHTAG);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const HASHTAGS = Object.keys(HASHTAG_COLORS);
+
+  // Only #general rooms are approval-gated; the rest are open to everyone.
+  const gated = hashtag === APPROVAL_HASHTAG;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -217,9 +358,27 @@ const CreateRoomModal = ({ onClose, onCreate }) => {
             onChange={(e) => setHashtag(e.target.value)}
           >
             {HASHTAGS.map(h => (
-              <option key={h} value={h}>{hashtagEmoji(h)} {h}</option>
+              <option key={h} value={h}>
+                {hashtagEmoji(h)} {h}{h === APPROVAL_HASHTAG ? ' — approval required' : ''}
+              </option>
             ))}
           </select>
+
+          {gated ? (
+            <div className="ch-modal-note">
+              <Lock size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>
+                You&rsquo;ll be the admin of this {APPROVAL_HASHTAG} room. Anyone who
+                wants in has to request to join, and you approve or decline each request.
+              </span>
+            </div>
+          ) : (
+            <div className="ch-modal-note" style={{ background: '#f9fafb', color: '#6b7280' }}>
+              <Users size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>Open room — anyone can join without approval.</span>
+            </div>
+          )}
+
           <div className="ch-modal-actions">
             <button type="button" className="ch-modal-cancel" onClick={onClose}>Cancel</button>
             <button type="submit" className="ch-modal-confirm" disabled={loading}>
@@ -245,6 +404,11 @@ const ChatHubPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeRoom, setActiveRoom] = useState(null); // full room object
   const [showCreate, setShowCreate] = useState(false);
+
+  // Approval-gated rooms
+  const [showRequests, setShowRequests] = useState(false); // creator's requests panel
+  const [requestingId, setRequestingId] = useState(null);  // room awaiting our request call
+  const [gateNotice, setGateNotice]     = useState('');    // inline feedback in the room list
 
   // Chat state
   const [messages, setMessages] = useState([]);
@@ -342,6 +506,58 @@ const ChatHubPage = () => {
       if (roomId === activeRoomRef.current?._id) setOnlineUsers(users);
     };
 
+    // ── Approval-flow events ─────────────────────────────────────────────────
+    // Someone asked to join a room we admin — refresh so the badge updates.
+    const onJoinRequestReceived = ({ roomName, user }) => {
+      fetchRooms();
+      setSysMessages(prev => [...prev, `${user?.displayName || 'Someone'} asked to join ${roomName}`]);
+    };
+
+    // Our own request was accepted or declined.
+    const onJoinRequestDecided = ({ roomId, roomName, status }) => {
+      setRooms(prev => prev.map(r =>
+        r._id === roomId
+          ? { ...r, myAccess: status, canEnter: status === 'approved' }
+          : r
+      ));
+      setGateNotice(
+        status === 'approved'
+          ? `You were accepted into ${roomName}.`
+          : `Your request to join ${roomName} was declined.`
+      );
+      if (status === 'declined' && activeRoomRef.current?._id === roomId) {
+        setActiveRoom(null);
+        setMessages([]);
+      }
+    };
+
+    // The server refused (or revoked) our access to a room.
+    const onRoomAccessDenied = ({ roomId, status, message }) => {
+      setRooms(prev => prev.map(r =>
+        r._id === roomId ? { ...r, myAccess: status, canEnter: false } : r
+      ));
+      setGateNotice(message || 'You do not have access to that room.');
+      if (activeRoomRef.current?._id === roomId) {
+        setActiveRoom(null);
+        setMessages([]);
+      }
+    };
+
+    // A member was removed from a room we're sitting in.
+    const onRoomAccessRevoked = ({ roomId, userId }) => {
+      if (userId !== user?._id) return;
+      if (activeRoomRef.current?._id === roomId) {
+        setActiveRoom(null);
+        setMessages([]);
+        setGateNotice('Your access to that room was revoked.');
+      }
+    };
+
+    socket.on('joinRequestReceived', onJoinRequestReceived);
+    socket.on('joinRequestDecided',  onJoinRequestDecided);
+    socket.on('roomAccessDenied',    onRoomAccessDenied);
+    socket.on('roomAccessRevoked',   onRoomAccessRevoked);
+
     socket.on('globalJoined', onGlobalJoined);
     socket.on('globalMessage', onGlobalMessage);
     socket.on('globalRoomClosed', onGlobalRoomClosed);
@@ -351,6 +567,10 @@ const ChatHubPage = () => {
     socket.on('onlineUsersUpdate', onOnlineUsersUpdate);
 
     return () => {
+      socket.off('joinRequestReceived', onJoinRequestReceived);
+      socket.off('joinRequestDecided',  onJoinRequestDecided);
+      socket.off('roomAccessDenied',    onRoomAccessDenied);
+      socket.off('roomAccessRevoked',   onRoomAccessRevoked);
       socket.off('globalJoined', onGlobalJoined);
       socket.off('globalMessage', onGlobalMessage);
       socket.off('globalRoomClosed', onGlobalRoomClosed);
@@ -359,12 +579,48 @@ const ChatHubPage = () => {
       socket.off('globalUserLeft', onGlobalUserLeft);
       socket.off('onlineUsersUpdate', onOnlineUsersUpdate);
     };
-  }, [socket, fetchRooms]);
+  }, [socket, fetchRooms, user?._id]);
 
   // ── Auto-scroll messages ────────────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sysMessages]);
+
+  // ── Ask the room's creator for access ───────────────────────────────────────
+  const handleRequestJoin = useCallback(async (room) => {
+    // Never ask to join a room we created — the server rejects it with a 400
+    // and there is nothing sensible to show the user.
+    const creatorId = room.createdBy?._id || room.createdBy;
+    if (creatorId && user?._id && String(creatorId) === String(user._id)) {
+      setRooms(prev => prev.map(r =>
+        r._id === room._id ? { ...r, myAccess: 'creator', canEnter: true } : r
+      ));
+      return;
+    }
+
+    setRequestingId(room._id);
+    setGateNotice('');
+    try {
+      await api.post(`/rooms/${room._id}/join-request`);
+      // Reflect the new state immediately; the creator decides from their side.
+      setRooms(prev => prev.map(r =>
+        r._id === room._id ? { ...r, myAccess: 'pending', canEnter: false } : r
+      ));
+      setGateNotice(`Request sent to ${room.createdBy?.displayName || 'the room admin'}.`);
+    } catch (err) {
+      const status = err.response?.data?.status;
+      if (status) {
+        setRooms(prev => prev.map(r =>
+          r._id === room._id
+            ? { ...r, myAccess: status, canEnter: status === 'approved' }
+            : r
+        ));
+      }
+      setGateNotice(err.response?.data?.message || 'Failed to send request.');
+    } finally {
+      setRequestingId(null);
+    }
+  }, [user?._id]);
 
   // ── Select a room ────────────────────────────────────────────────────────────
   const handleSelectRoom = useCallback(async (room) => {
@@ -372,6 +628,13 @@ const ChatHubPage = () => {
     if (room._roomType === 'post') {
       const postId = room.postId?._id || room.postId;
       navigate(`/feed?post=${postId}`);
+      return;
+    }
+
+    // Approval-gated room we are not a member of: never open it. The backend
+    // enforces this too — this just avoids a guaranteed 403 round-trip.
+    if (room.requiresApproval && room.canEnter === false) {
+      setGateNotice('');
       return;
     }
 
@@ -476,7 +739,15 @@ const ChatHubPage = () => {
 
   // ── Room creation callback ────────────────────────────────────────────────────
   const handleRoomCreated = (newRoom) => {
-    const tagged = { ...newRoom, _roomType: 'global' };
+    const tagged = {
+      _roomType:    'global',
+      // Fallbacks in case an older backend omits the access fields — without
+      // these the creator's own new room renders as if they were locked out.
+      myAccess:     newRoom.requiresApproval ? 'creator' : 'open',
+      canEnter:     true,
+      pendingCount: 0,
+      ...newRoom,
+    };
     setRooms(prev => [tagged, ...prev]);
     setShowCreate(false);
     setTimeout(() => handleSelectRoom(tagged), 100);
@@ -586,21 +857,64 @@ const ChatHubPage = () => {
               {globalRooms.length > 0 && (
                 <>
                   <div className="ch-rooms-section-label">Hub Rooms</div>
-                  {globalRooms.map(room => (
-                    <div
-                      key={room._id}
-                      className={`ch-room-item ${activeRoom?._id === room._id ? 'ch-room-item--active' : ''}`}
-                      onClick={() => handleSelectRoom(room)}
-                    >
-                      <div className="ch-room-hashtag-dot" style={{ background: hashtagColor(room.hashtag) }}>
-                        #
+                  {globalRooms.map(room => {
+                    // Compare ids directly as well as trusting myAccess: a room
+                    // object can reach the list from a socket event or a create
+                    // response, and mislabelling your own room offers you a
+                    // "Request" button for a room you already own.
+                    const creatorId = room.createdBy?._id || room.createdBy;
+                    const isAdmin   = room.myAccess === 'creator' ||
+                                      (creatorId && user?._id && String(creatorId) === String(user._id));
+                    const gated     = room.requiresApproval && room.canEnter === false && !isAdmin;
+                    return (
+                      <div
+                        key={room._id}
+                        className={`ch-room-item ${activeRoom?._id === room._id ? 'ch-room-item--active' : ''} ${gated ? 'ch-room-item--locked' : ''}`}
+                        onClick={() => handleSelectRoom(room)}
+                        title={gated ? 'Approval required to join this room' : undefined}
+                      >
+                        <div className="ch-room-hashtag-dot" style={{ background: hashtagColor(room.hashtag) }}>
+                          {gated ? <Lock size={11} /> : '#'}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="ch-room-name">{room.name}</div>
+                          <div className="ch-room-meta">
+                            {room.hashtag} · {isAdmin ? 'You' : (room.createdBy?.displayName || 'Unknown')}
+                          </div>
+                        </div>
+
+                        {/* Creator: pending-request badge */}
+                        {isAdmin && room.pendingCount > 0 && (
+                          <button
+                            className="ch-pending-badge"
+                            title={`${room.pendingCount} pending join request${room.pendingCount === 1 ? '' : 's'}`}
+                            onClick={(e) => { e.stopPropagation(); setActiveRoom(room); setShowRequests(true); }}
+                          >
+                            <UserPlus size={11} /> {room.pendingCount}
+                          </button>
+                        )}
+
+                        {/* Non-member: request / pending / declined */}
+                        {gated && room.myAccess === 'none' && (
+                          <button
+                            className="ch-join-btn"
+                            disabled={requestingId === room._id}
+                            onClick={(e) => { e.stopPropagation(); handleRequestJoin(room); }}
+                          >
+                            {requestingId === room._id ? 'Sending…' : 'Request'}
+                          </button>
+                        )}
+                        {gated && room.myAccess === 'pending' && (
+                          <span className="ch-request-tag ch-request-tag--pending">
+                            <Clock size={11} /> Pending
+                          </span>
+                        )}
+                        {gated && room.myAccess === 'declined' && (
+                          <span className="ch-request-tag ch-request-tag--declined">Declined</span>
+                        )}
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="ch-room-name">{room.name}</div>
-                        <div className="ch-room-meta">{room.hashtag} · {room.createdBy?.displayName || 'Unknown'}</div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </>
               )}
 
@@ -630,6 +944,12 @@ const ChatHubPage = () => {
             </>
           )}
         </div>
+
+        {gateNotice && (
+          <div className="ch-gate-notice" onClick={() => setGateNotice('')} title="Dismiss">
+            {gateNotice}
+          </div>
+        )}
 
         <button className="ch-create-btn" onClick={() => setShowCreate(true)}>
           <Plus size={15} />
@@ -689,6 +1009,19 @@ const ChatHubPage = () => {
                       {activeRoom.createdBy.displayName || 'Unknown'}
                     </span>
                   </span>
+                )}
+                {activeRoom.myAccess === 'creator' && !roomClosed && (
+                  <button
+                    className="ch-requests-btn"
+                    onClick={() => setShowRequests(true)}
+                    title="Review who wants to join this room"
+                  >
+                    <UserPlus size={13} />
+                    Requests
+                    {activeRoom.pendingCount > 0 && (
+                      <span className="ch-requests-btn-count">{activeRoom.pendingCount}</span>
+                    )}
+                  </button>
                 )}
                 {canClose && !roomClosed && (
                   <button
@@ -830,6 +1163,14 @@ const ChatHubPage = () => {
         <CreateRoomModal
           onClose={() => setShowCreate(false)}
           onCreate={handleRoomCreated}
+        />
+      )}
+
+      {showRequests && activeRoom && (
+        <JoinRequestsPanel
+          room={activeRoom}
+          onClose={() => setShowRequests(false)}
+          onDecided={fetchRooms}
         />
       )}
     </div>

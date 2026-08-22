@@ -142,15 +142,44 @@ console.log('[Socket.io] Initialized.');
 // ── 7 + 8. Connect DB → Start Cron → Listen ─────────────────────────────────
 const PORT = process.env.PORT || 5000;
 
+// HOST is optional. Left unset, Node binds dual-stack (IPv4 + IPv6), so both
+// http://localhost and http://127.0.0.1 reach the server. Set it only to pin
+// the server to one interface.
+//
+// Note: do not run this on port 5000 on macOS — Control Center (AirPlay
+// Receiver) holds *:5000 and answers 403 with no CORS headers whenever this
+// process is down, which the browser reports as a Socket.io CORS failure.
+const HOST = process.env.HOST || null;
+
 connectDB().then(() => {
   // Cron job requires an active DB connection
   startPostExpiryCron();
 
-  httpServer.listen(PORT, () => {
+  const onListening = () => {
     console.log(`\n🚀 Campus Buzz backend running on port ${PORT}`);
     console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`   Listening on: ${HOST || 'all interfaces'}:${PORT}`);
     console.log(`   API base:    http://localhost:${PORT}/api\n`);
-  });
+  };
+
+  if (HOST) httpServer.listen(PORT, HOST, onListening);
+  else      httpServer.listen(PORT, onListening);
+});
+
+// A port collision is the most common local-dev failure — say so plainly
+// instead of dumping a raw stack trace.
+httpServer.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n[server] Port ${PORT} is already in use.`);
+    if (PORT === 5000 || PORT === '5000') {
+      console.error('[server] On macOS this is usually Control Center (AirPlay Receiver).');
+      console.error('[server] Set a different PORT in backend/.env, or turn off');
+      console.error('[server] System Settings > General > AirDrop & Handoff > AirPlay Receiver.\n');
+    }
+    process.exit(1);
+  }
+  console.error('[server] HTTP server error:', err);
+  process.exit(1);
 });
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────────

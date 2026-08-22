@@ -1314,3 +1314,186 @@
 }
 .story-create-submit:hover:not(:disabled) { background: #4338ca; }
 .story-create-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Approval-gated chat rooms ─────────────────────────────────────────────── */
+
+/* A room the viewer has not been admitted to */
+.ch-room-item--locked            { opacity: 0.82; cursor: default; }
+.ch-room-item--locked:hover      { border-color: #e5e7eb; box-shadow: none; }
+.ch-room-item--locked .ch-room-name { color: #6b7280; }
+
+/* "Request" button on a locked room */
+.ch-join-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #4f46e5;
+  background: #eef2ff;
+  color: #4338ca;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.ch-join-btn:hover:not(:disabled) { background: #e0e7ff; }
+.ch-join-btn:disabled             { opacity: 0.6; cursor: default; }
+
+/* Pending-request count badge on the creator's own room */
+.ch-pending-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: none;
+  background: #f59e0b;
+  color: #fff;
+  cursor: pointer;
+}
+.ch-pending-badge:hover { background: #d97706; }
+
+/* Status pills — reused in the list and the requests panel */
+.ch-request-tag {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.ch-request-tag--pending  { background: #fef3c7; color: #92400e; }
+.ch-request-tag--declined { background: #fee2e2; color: #991b1b; }
+.ch-request-tag--approved { background: #d1fae5; color: #065f46; }
+
+/* Inline feedback under the room list */
+.ch-gate-notice {
+  margin: 8px 0 0;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #3730a3;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+/* "Requests" button in the chat header */
+.ch-requests-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.ch-requests-btn:hover { background: #f3f4f6; }
+.ch-requests-btn-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Rows inside the join-requests panel */
+.ch-request-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 2px;
+  border-bottom: 1px solid #f3f4f6;
+}
+.ch-request-row:last-child { border-bottom: none; }
+.ch-request-avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #e0e7ff;
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.ch-request-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ch-request-meta {
+  font-size: 11.5px;
+  color: #9ca3af;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ch-request-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.ch-request-btn:disabled { opacity: 0.55; cursor: default; }
+.ch-request-btn--approve { background: #10b981; color: #fff; }
+.ch-request-btn--decline { background: #fff; color: #b91c1c; border-color: #fca5a5; }
+.ch-request-btn:hover:not(:disabled) { filter: brightness(0.95); }
+
+/* Fixed #general category row in the create-room modal */
+.ch-modal-fixed-category {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  font-size: 13.5px;
+  color: #374151;
+}
+.ch-modal-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 12px;
+  line-height: 1.45;
+}
