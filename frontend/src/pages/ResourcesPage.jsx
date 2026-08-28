@@ -12,6 +12,7 @@ import {
   MessageSquare, Calendar, ShieldAlert, BookOpen, Map,
   ArrowRight, MapPin, Award, Users, ExternalLink, Sparkles,
 } from 'lucide-react';
+import FindBot from '../components/FindBot';
 
 /* ── Resource card definitions ──────────────────────────────────────────── */
 const RESOURCES = [
@@ -298,6 +299,11 @@ export default function ResourcesPage() {
         </div>
 
       </div>
+
+      {/* Find BOT lives on Resources only. This page is already the "where do I
+          go for X" hub, so an assistant that answers in navigation buttons
+          belongs beside the cards rather than floating over every screen. */}
+      <FindBot />
     </div>
   );
 }
