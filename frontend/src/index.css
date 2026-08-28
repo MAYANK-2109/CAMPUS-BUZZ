@@ -1895,3 +1895,50 @@
   .complaint-card { transition: none; }
   .complaint-card:hover { transform: none; }
 }
+
+/* ── Feed: subtle ambient depth without changing its layout ─────────────── */
+.feed-surface {
+  background-color: #f7f8fa;
+  background-image:
+    radial-gradient(circle at 14% 2%, rgba(99, 102, 241, 0.04), transparent 30rem),
+    radial-gradient(circle at 92% 20%, rgba(14, 165, 233, 0.025), transparent 26rem),
+    radial-gradient(circle at 48% 96%, rgba(236, 72, 153, 0.014), transparent 32rem);
+  background-attachment: fixed;
+}
+
+.feed-toolbar {
+  border-color: rgba(226, 232, 240, 0.84);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 1px 10px rgba(15, 23, 42, 0.025);
+}
+
+.feed-filter-active {
+  border-color: #171923;
+  background: linear-gradient(135deg, #111827 0%, #292541 100%);
+}
+
+.feed-create-button {
+  background: linear-gradient(145deg, #111827 0%, #292541 100%);
+  box-shadow: 0 12px 28px rgba(30, 27, 75, 0.18);
+}
+.feed-create-button:hover {
+  background: linear-gradient(145deg, #1f2937 0%, #34305a 100%);
+  box-shadow: 0 14px 30px rgba(30, 27, 75, 0.22);
+}
+
+.post-card-surface {
+  border-color: rgba(226, 232, 240, 0.92);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.995), rgba(251, 251, 253, 0.97));
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.045);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+.post-card-surface:hover {
+  transform: translateY(-1px);
+  border-color: rgba(199, 210, 254, 0.68);
+  box-shadow: 0 9px 24px rgba(30, 41, 59, 0.07);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .post-card-surface { transition: none; }
+  .post-card-surface:hover { transform: none; }
+}

@@ -230,7 +230,7 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
 
   return (
     <>
-      <article className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200 mb-6 max-w-xl mx-auto">
+      <article className="post-card-surface border rounded-2xl overflow-hidden mb-6 max-w-xl mx-auto">
 
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between px-4 pt-4 pb-3">

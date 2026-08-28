@@ -191,11 +191,11 @@ const FeedPage = () => {
 
   return (
     <div
-      className="min-h-screen pb-16 transition-colors duration-500"
+      className="feed-surface min-h-screen pb-16 transition-colors duration-500"
       style={{
         background: clubMode
           ? 'linear-gradient(155deg, #f5f3ff 0%, #faf5ff 45%, #ede9fe 100%)'
-          : 'transparent',
+          : undefined,
       }}
     >
       {/* ── Announcement Stories — hidden in club mode ─────────────── */}
@@ -212,10 +212,10 @@ const FeedPage = () => {
 
       {/* ── Sticky filter bar ─────────────────────────────────────────── */}
       <div
-        className="sticky top-0 z-30 backdrop-blur-md border-b transition-all duration-500 px-4 py-2.5"
+        className="feed-toolbar sticky top-0 z-30 backdrop-blur-md border-b transition-all duration-500 px-4 py-2.5"
         style={{
-          background: clubMode ? 'rgba(237,233,254,0.95)' : 'rgba(255,255,255,0.95)',
-          borderColor: clubMode ? '#c4b5fd' : '#f3f4f6',
+          background: clubMode ? 'rgba(237,233,254,0.95)' : undefined,
+          borderColor: clubMode ? '#c4b5fd' : undefined,
         }}
       >
         <div className="max-w-xl mx-auto flex items-center gap-2">
@@ -231,8 +231,8 @@ const FeedPage = () => {
                 onClick={() => feed.handleFilterChange(f)}
                 className={`flex-shrink-0 px-4 py-1.5 text-xs font-semibold rounded-full border transition-all ${
                   feed.filter === f
-                    ? 'bg-gray-900 border-gray-900 text-white shadow-sm'
-                    : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                    ? 'feed-filter-active text-white shadow-sm'
+                    : 'bg-white/80 border-gray-200/90 text-gray-600 hover:border-indigo-200 hover:bg-white'
                 }`}
               >
                 {f === 'all' ? '✦ All' : f}
@@ -416,7 +416,7 @@ const FeedPage = () => {
         className={`fixed bottom-24 md:bottom-6 right-6 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-all duration-300 z-20 ${
           clubMode
             ? 'bg-gradient-to-br from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 shadow-purple-300'
-            : 'bg-gray-900 hover:bg-gray-800'
+            : 'feed-create-button'
         } text-white`}
         title={clubMode ? 'Create Club Post' : 'Create Post'}
       >
