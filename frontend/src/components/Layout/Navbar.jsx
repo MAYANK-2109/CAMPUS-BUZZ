@@ -11,7 +11,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  Home, LayoutGrid, Car,
+  Home, LayoutGrid, Car, Map,
   Bell, LogOut, User, ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { label: 'Feed',      to: '/feed',      Icon: Home },
   { label: 'Ride Split',to: '/rides',     Icon: Car },
   { label: 'Resources', to: '/resources', Icon: LayoutGrid },
+  { label: 'Indoor Map', to: '/map',       Icon: Map },
 ];
 
 const Navbar = () => {

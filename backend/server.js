@@ -13,15 +13,20 @@
  *   7. Listen for connections.
  */
 
-// ── 0. DNS override ─────────────────────────────────────────────────────────
-// Some restricted networks (college, corporate) block SRV DNS lookups used by
-// mongodb+srv:// URIs. Force Node.js to use Google's public DNS to resolve them.
-const dns = require('dns');
-dns.setServers(['8.8.8.8', '8.8.4.4']);
-
-// ── 1. Environment ─────────────────────────────────────────────────────────
+// ── 0. Environment and optional DNS override ────────────────────────────────
 require('dotenv').config();
 
+// Keep the operating system resolver by default. Networks that specifically
+// require alternate DNS can provide a comma-separated DNS_SERVERS value.
+const dns = require('dns');
+const customDnsServers = (process.env.DNS_SERVERS || '')
+  .split(',')
+  .map(server => server.trim())
+  .filter(Boolean);
+if (customDnsServers.length) dns.setServers(customDnsServers);
+
+// ── 1. Environment ─────────────────────────────────────────────────────────
+const path      = require('path');
 const http      = require('http');
 const express   = require('express');
 const cors      = require('cors');
@@ -125,7 +130,19 @@ app.use('/api/auth', authLimiter);
 app.use('/api',      apiLimiter);
 app.use('/api',      routes);
 
-// 404 handler for undefined routes
+// Serve frontend static files
+const frontendBuildPath = path.join(__dirname, '../frontend/build');
+app.use(express.static(frontendBuildPath));
+
+// Any request that is not an API route and not a static file should return the React app
+app.get('*', (req, res, next) => {
+  if (req.originalUrl.startsWith('/api')) {
+    return next(); // Let the 404 handler catch it
+  }
+  res.sendFile(path.join(frontendBuildPath, 'index.html'));
+});
+
+// 404 handler for undefined API routes
 app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found.` });
 });
