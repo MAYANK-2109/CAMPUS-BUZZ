@@ -31,6 +31,66 @@ const CHAT_HASHTAGS = new Set(['#foodsplit', '#cabsplit', '#resell']);
 const DEFAULT_G = 0.8;   // gravity   – higher = popularity wins more
 const DEFAULT_H = 12;    // half-life – hours after which time-boost halves
 
+// ── Moderation helpers ───────────────────────────────────────────────────────
+// The verdict itself is produced by middleware/moderate.js before this
+// controller runs; everything below is about persisting it and getting a human
+// in front of the posts that need one.
+
+/**
+ * Maps a pipeline verdict onto the Post.moderation subdocument.
+ * Defensive about a missing verdict so the controller still works if the route
+ * is ever wired without the middleware.
+ */
+const buildModerationDoc = (verdict) => {
+  if (!verdict) return { status: 'clean' };
+
+  return {
+    status:          verdict.status === 'blocked' ? 'flagged' : (verdict.status || 'clean'),
+    primaryCategory: verdict.primaryCategory || null,
+    maxScore:        verdict.maxScore || 0,
+    scores:          verdict.scores || {},
+    tier:            verdict.tier || 0,
+    reasons:         verdict.reasons || [],
+    requiresSupport: Boolean(verdict.requiresSupport),
+    pipelineVersion: verdict.pipelineVersion || null,
+    llmModel:        verdict.llmModel || null,
+    latencyMs:       verdict.latencyMs || 0,
+  };
+};
+
+/**
+ * Fans a review notification out to every Admin.
+ *
+ * Two different messages on purpose. A possible self-harm post is not a
+ * rule violation and must not land in an Admin's queue looking like one —
+ * it needs a person to reach out, not a takedown decision.
+ *
+ * Fire-and-forget: a notification failure must never fail the post that was
+ * already written.
+ */
+const notifyAdminsOfFlag = async (post, verdict, author) => {
+  try {
+    const admins = await User.find({ role: 'Admin' }).select('_id').lean();
+    if (!admins.length) return;
+
+    const message = verdict.requiresSupport
+      ? `Wellbeing check: a post by ${author.displayName} may indicate distress. Please reach out.`
+      : `Flagged for review (${verdict.primaryCategory}, ${verdict.maxScore}): "${post.title}" by ${author.displayName}`;
+
+    await emitNotifications(
+      admins.map((admin) => ({
+        recipient: admin._id,
+        sender:    author._id,
+        type:      'moderation',
+        post:      post._id,
+        message,
+      })),
+    );
+  } catch (err) {
+    console.error('[postController] moderation notification failed:', err.message);
+  }
+};
+
 // ── GET /api/posts ────────────────────────────────────────────────────────────
 exports.getPosts = async (req, res) => {
   try {
@@ -227,6 +287,7 @@ exports.createPost = async (req, res) => {
       mentions:   mentionIds,
       totalFare:  hashtag === '#cabsplit' && totalFare ? Number(totalFare) : null,
       linkedEvent: req.body.linkedEvent || null,
+      moderation: buildModerationDoc(req.moderation),
     });
 
     // ── Auto-create a ChatRoom for chat-enabled posts ────────────────────────
@@ -264,7 +325,23 @@ exports.createPost = async (req, res) => {
       { path: 'mentions', select: 'displayName _id' }
     ]);
 
-    return res.status(201).json({ success: true, data: post });
+    // ── Moderation follow-up ─────────────────────────────────────────────────
+    // The post is already saved. Flagged posts stay visible while an Admin
+    // reviews them — hiding first and asking later would make the filter's
+    // false positives indistinguishable from a takedown.
+    if (req.moderation?.status === 'flagged') {
+      await notifyAdminsOfFlag(post, req.moderation, req.user);
+    }
+
+    return res.status(201).json({
+      success: true,
+      data: post,
+      // Surfaced to the author only for possible self-harm content, where the
+      // right response is a supportive note rather than an enforcement notice.
+      ...(req.moderation?.requiresSupport
+        ? { notice: req.moderation.supportMessage }
+        : {}),
+    });
   } catch (err) {
     console.error('[postController.createPost]', err);
     if (err.name === 'ValidationError') {
@@ -272,6 +349,106 @@ exports.createPost = async (req, res) => {
       return res.status(422).json({ success: false, message: messages.join(' ') });
     }
     return res.status(500).json({ success: false, message: 'Failed to create post.' });
+  }
+};
+
+// ── GET /api/moderation/flagged  (Admin) ─────────────────────────────────────
+/**
+ * The review queue. Flagging without a queue is theatre — nobody ever sees the
+ * flag and the post stays up regardless, so this endpoint is part of the
+ * feature, not an extra.
+ *
+ * Ordered by severity rather than recency: the point of a queue is that the
+ * worst thing waiting gets looked at first. Wellbeing cases sort to the very
+ * top via ?filter=support.
+ */
+exports.getFlaggedPosts = async (req, res) => {
+  try {
+    const page  = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(50, parseInt(req.query.limit) || 20);
+
+    const query = { isActive: true, 'moderation.status': 'flagged' };
+
+    if (req.query.filter === 'support')      query['moderation.requiresSupport'] = true;
+    else if (req.query.filter === 'violations') query['moderation.requiresSupport'] = false;
+    if (req.query.category)                  query['moderation.primaryCategory'] = req.query.category;
+
+    const [posts, total] = await Promise.all([
+      Post.find(query)
+        .sort({ 'moderation.requiresSupport': -1, 'moderation.maxScore': -1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('author', 'displayName role instituteEmail rollNo avatarUrl')
+        .lean(),
+      Post.countDocuments(query),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: posts,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
+  } catch (err) {
+    console.error('[postController.getFlaggedPosts]', err);
+    return res.status(500).json({ success: false, message: 'Failed to load the moderation queue.' });
+  }
+};
+
+// ── PATCH /api/moderation/:id  (Admin) ───────────────────────────────────────
+/**
+ * Resolve one flagged post: 'approve' keeps it, 'remove' soft-deletes it.
+ *
+ * Soft-delete, matching how the expiry cron and deletePost already work —
+ * hard-deleting would orphan the post's ChatRoom and its message history.
+ *
+ * The resolution is written back onto the post rather than just clearing the
+ * flag, which is what makes it possible to measure the pipeline later: every
+ * approve is a false positive and every remove is a true one, and that is the
+ * only honest way to tune the thresholds in config.js.
+ */
+exports.reviewFlaggedPost = async (req, res) => {
+  try {
+    const { action, note } = req.body;
+
+    if (!['approve', 'remove'].includes(action)) {
+      return res.status(400).json({ success: false, message: "action must be 'approve' or 'remove'." });
+    }
+
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ success: false, message: 'Post not found.' });
+
+    if (post.moderation?.status !== 'flagged') {
+      return res.status(409).json({
+        success: false,
+        message: `This post is not awaiting review (status: ${post.moderation?.status || 'clean'}).`,
+      });
+    }
+
+    post.moderation.status     = action === 'approve' ? 'approved' : 'removed';
+    post.moderation.reviewedBy = req.user._id;
+    post.moderation.reviewedAt = new Date();
+    if (note) post.moderation.reasons.push(`admin note: ${note}`);
+
+    if (action === 'remove') post.isActive = false;
+
+    await post.save();
+
+    // Tell the author their post came down, and why. A silent removal reads as
+    // a bug and generates a support request; this closes the loop.
+    if (action === 'remove') {
+      await emitNotifications([{
+        recipient: post.author,
+        sender:    req.user._id,
+        type:      'moderation',
+        post:      post._id,
+        message:   `Your post "${post.title}" was removed after review${note ? `: ${note}` : '.'}`,
+      }]).catch((err) => console.error('[postController] removal notice failed:', err.message));
+    }
+
+    return res.status(200).json({ success: true, data: post });
+  } catch (err) {
+    console.error('[postController.reviewFlaggedPost]', err);
+    return res.status(500).json({ success: false, message: 'Failed to record the review.' });
   }
 };
 
@@ -317,10 +494,25 @@ exports.updatePost = async (req, res) => {
       }
     });
 
+    // Edits are re-moderated by the same middleware on this route. Without
+    // that, "post something clean, then edit in the abuse" is a one-step
+    // bypass of the entire pipeline.
+    if (req.moderation) {
+      post.moderation = buildModerationDoc(req.moderation);
+    }
+
     await post.save();
     await post.populate('author', 'displayName role instituteEmail rollNo');
 
-    return res.status(200).json({ success: true, data: post });
+    if (req.moderation?.status === 'flagged') {
+      await notifyAdminsOfFlag(post, req.moderation, req.user);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: post,
+      ...(req.moderation?.requiresSupport ? { notice: req.moderation.supportMessage } : {}),
+    });
   } catch (err) {
     console.error('[postController.updatePost]', err);
     if (err.name === 'ValidationError') {

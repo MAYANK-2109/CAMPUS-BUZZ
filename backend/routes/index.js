@@ -33,6 +33,7 @@ const router = require('express').Router();
 // ── Middleware imports ────────────────────────────────────────────────────────
 const { protect }                       = require('../middleware/auth');
 const { requireRole, adminOnly, clubOrAdmin } = require('../middleware/rbac');
+const { moderatePost }                  = require('../middleware/moderate');
 
 // ── Controller imports ────────────────────────────────────────────────────────
 const authController          = require('../controllers/authController');
@@ -74,7 +75,7 @@ router.get( '/auth/me',       protect, authController.getMe);
  *   controller level via query param / frontend routing.
  */
 router.get('/posts',      protect, postController.getPosts);
-router.post('/posts',     protect, postController.createPost);
+router.post('/posts',     protect, moderatePost, postController.createPost);
 // ── GET /api/posts/trending-hashtags ─────────────────────────────────────────
 router.get('/posts/trending-hashtags', protect, async (req, res) => {
   try {
@@ -94,8 +95,14 @@ router.get('/posts/trending-hashtags', protect, async (req, res) => {
 });
 
 router.get('/posts/:id',  protect, postController.getPostById);
-router.patch('/posts/:id',  protect, postController.updatePost);
+// moderatePost runs on edits too — otherwise "post clean, then edit in the
+// abuse" bypasses the whole pipeline in one step.
+router.patch('/posts/:id',  protect, moderatePost, postController.updatePost);
 router.delete('/posts/:id', protect, postController.deletePost);
+
+// ── Moderation review queue (Admin only) ─────────────────────────────────────
+router.get('/moderation/flagged', protect, adminOnly, postController.getFlaggedPosts);
+router.patch('/moderation/:id',   protect, adminOnly, postController.reviewFlaggedPost);
 
 // Post interactions
 router.post('/posts/:id/like',        protect, interactionController.toggleLike);

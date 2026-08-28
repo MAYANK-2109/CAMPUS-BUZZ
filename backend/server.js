@@ -29,6 +29,8 @@ const mongoose  = require('mongoose');
 
 const routes    = require('./routes/index');
 const { initSocket }          = require('./socket/index');
+const { warmup: warmupModeration } = require('./utils/moderation');
+const moderationConfig             = require('./utils/moderation/config');
 const { startPostExpiryCron } = require('./cron/postExpiry');
 const { startSeatExpiryCron } = require('./cron/seatExpiry');
 const rateLimit               = require('express-rate-limit');
@@ -168,6 +170,22 @@ connectDB().then(() => {
 
   if (HOST) httpServer.listen(PORT, HOST, onListening);
   else      httpServer.listen(PORT, onListening);
+
+  // Preload the content-moderation classifier.
+  //
+  // Deliberately NOT awaited: the first run downloads ~150 MB of model weights
+  // and can take a minute, and the API must be answering requests during that.
+  // Posts submitted before it finishes are still moderated by the rule and
+  // sentiment tiers and are flagged for review — see policy.js, which records
+  // that the verdict was reached without the ML tier.
+  if (moderationConfig.ml.enabled && moderationConfig.ml.warmupOnBoot) {
+    warmupModeration()
+      .then((r) => {
+        if (r.ok) console.log('   Moderation: ML classifier ready.\n');
+        else console.warn(`   Moderation: ML classifier unavailable (${r.reason}) — running on rules + sentiment only.\n`);
+      })
+      .catch((err) => console.warn('   Moderation: warmup failed —', err.message));
+  }
 });
 
 // A port collision is the most common local-dev failure — say so plainly

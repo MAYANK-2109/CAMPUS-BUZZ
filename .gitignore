@@ -36,3 +36,8 @@ coverage/
 
 # Local dev MongoDB data (scripts/dev-db.js)
 backend/.mongo-data/
+
+# Content-moderation model weights (utils/moderation/classifier.js).
+# ~150 MB of ONNX files, downloaded from Hugging Face on first boot and
+# re-downloaded automatically if missing. Never commit them.
+backend/.models/

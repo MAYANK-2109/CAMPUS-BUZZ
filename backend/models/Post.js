@@ -106,6 +106,46 @@ const PostSchema = new mongoose.Schema(
     },
 
     /**
+     * moderation: verdict from the NLP pipeline (utils/moderation).
+     *
+     * Written on every create and update. A 'blocked' post never reaches the
+     * database — the middleware rejects the request before Post.create — so the
+     * only statuses seen here are the ones that were published:
+     *
+     *   clean     – pipeline found nothing actionable
+     *   flagged   – published, but awaiting Admin review
+     *   approved  – an Admin reviewed the flag and kept the post
+     *   removed   – an Admin reviewed the flag and took the post down
+     *
+     * `scores` is kept as a raw object rather than a typed subdocument: the
+     * category set is owned by utils/moderation/lexicon.js and will change as
+     * the policy is tuned. Pinning it in the schema would mean a migration
+     * every time a category is added.
+     */
+    moderation: {
+      status: {
+        type:    String,
+        enum:    ['clean', 'flagged', 'approved', 'removed'],
+        default: 'clean',
+        index:   true,
+      },
+      primaryCategory: { type: String,  default: null },
+      maxScore:        { type: Number,  default: 0 },
+      scores:          { type: mongoose.Schema.Types.Mixed, default: {} },
+      /** Which tier produced the verdict (1 lexical, 2 sentiment, 3 semantic). */
+      tier:            { type: Number,  default: 0 },
+      /** Human-readable justifications, shown to the reviewing Admin. */
+      reasons:         { type: [String], default: [] },
+      /** True when the post may indicate self-harm — routed to support, never enforcement. */
+      requiresSupport: { type: Boolean, default: false },
+      pipelineVersion: { type: String,  default: null },
+      llmModel:        { type: String,  default: null },
+      latencyMs:       { type: Number,  default: 0 },
+      reviewedBy:      { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      reviewedAt:      { type: Date,    default: null },
+    },
+
+    /**
      * linkedEvent: optional reference to a calendar event.
      * Only populated for Club/Admin posts that are associated with
      * a specific campus event on the calendar.
@@ -126,6 +166,9 @@ PostSchema.index({ isActive: 1, createdAt: -1 });
 
 // ── Index for cron job efficiency ────────────────────────────────────────────
 PostSchema.index({ hashtag: 1, expiresAt: 1, isActive: 1 });
+
+// ── Index for the Admin moderation queue (flagged posts, newest first) ───────
+PostSchema.index({ 'moderation.status': 1, createdAt: -1 });
 
 // ── Virtual: is this post currently expired? ─────────────────────────────────
 PostSchema.virtual('isExpired').get(function isExpired() {

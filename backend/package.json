@@ -13,6 +13,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0",
+    "@huggingface/transformers": "^4.2.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -24,6 +26,7 @@
     "node-cron": "^3.0.3",
     "nodemailer": "^9.0.1",
     "qrcode": "^1.5.4",
+    "sentiment": "^5.0.2",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
