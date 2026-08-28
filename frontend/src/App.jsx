@@ -31,6 +31,7 @@ import ChatHubPage        from './pages/ChatHubPage';
 import ResourcesPage      from './pages/ResourcesPage';
 import LibraryPage        from './pages/LibraryPage';
 import RideSplitPage      from './pages/RideSplitPage';
+import IndoorMapPage      from './pages/IndoorMapPage';
 
 /**
  * AuthLayout: wraps protected pages in the full 3-column shell.
@@ -151,6 +152,17 @@ const App = () => (
               <ProtectedRoute>
                 <AuthLayout fullBleed>
                   <RideSplitPage />
+                </AuthLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/map"
+            element={
+              <ProtectedRoute>
+                <AuthLayout fullBleed>
+                  <IndoorMapPage />
                 </AuthLayout>
               </ProtectedRoute>
             }

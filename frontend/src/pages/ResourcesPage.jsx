@@ -9,7 +9,7 @@
 import React, { useState } from 'react';
 import { useNavigate }  from 'react-router-dom';
 import {
-  MessageSquare, Calendar, ShieldAlert, BookOpen,
+  MessageSquare, Calendar, ShieldAlert, BookOpen, Map,
   ArrowRight, MapPin, Award, Users, ExternalLink, Sparkles,
 } from 'lucide-react';
 
@@ -56,6 +56,20 @@ const RESOURCES = [
     badge: 'Portal',
     badgeClass: 'bg-amber-100 text-amber-700 border-amber-200',
     dotColor: 'bg-amber-500',
+  },
+  {
+    id: 'map',
+    label: 'Indoor Map',
+    subtitle: 'Floor-wise rooms & shortest-path navigation',
+    Icon: Map,
+    to: '/map',
+    iconBg: 'bg-cyan-600 text-white',
+    cardBorder: 'hover:border-cyan-300',
+    cardGlow: 'hover:shadow-cyan-100/80',
+    accentBg: 'from-cyan-50/80 to-sky-50/40',
+    badge: 'Navigate',
+    badgeClass: 'bg-cyan-100 text-cyan-700 border-cyan-200',
+    dotColor: 'bg-cyan-500',
   },
   {
     id: 'library',
