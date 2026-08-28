@@ -3,8 +3,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
-import { Heart, MessageCircle, ThumbsDown, UserPlus, Bell, AtSign, Megaphone, CalendarPlus, Timer, Flag } from 'lucide-react';
+import { Heart, MessageCircle, ThumbsDown, UserPlus, Bell, AtSign, Megaphone, CalendarPlus, Timer, Flag, Search, PackageCheck, ShieldAlert } from 'lucide-react';
 import api from '../utils/api';
 
 const TYPE_ICON = {
@@ -18,9 +19,24 @@ const TYPE_ICON = {
   event_request:  { Icon: CalendarPlus,  bg: 'bg-violet-100',  text: 'text-violet-600' },
   expiry_warning: { Icon: Timer,          bg: 'bg-amber-100',   text: 'text-amber-600'  },
   report:         { Icon: Flag,           bg: 'bg-red-100',     text: 'text-red-600'    },
+  match:          { Icon: Search,         bg: 'bg-teal-100',    text: 'text-teal-600'   },
+  sold:           { Icon: PackageCheck,   bg: 'bg-emerald-100', text: 'text-emerald-600'},
+  moderation:     { Icon: ShieldAlert,    bg: 'bg-red-100',     text: 'text-red-600'    },
 };
 
+/**
+ * Types whose message is already a complete sentence written for the reader.
+ *
+ * Every other type stores a fragment that reads as a continuation of the
+ * sender's name ("liked your post"), so the renderer prefixes the name. Doing
+ * that to a self-contained message produces nonsense — a lost-and-found match
+ * came out as "Turing Club of Programmers A post with a similar product has
+ * been found." — so these opt out of the prefix.
+ */
+const SELF_CONTAINED = new Set(['match', 'sold', 'moderation']);
+
 const NotificationsPage = () => {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -72,7 +88,21 @@ const NotificationsPage = () => {
               return (
                 <div
                   key={n._id}
+                  // A notification that says "please check the post to verify"
+                  // has to be able to take you there. Rows carrying a post are
+                  // clickable and deep-link into the feed.
+                  onClick={() => n.post?._id && navigate(`/feed?post=${n.post._id}`)}
+                  role={n.post?._id ? 'button' : undefined}
+                  tabIndex={n.post?._id ? 0 : undefined}
+                  onKeyDown={(e) => {
+                    if (n.post?._id && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      navigate(`/feed?post=${n.post._id}`);
+                    }
+                  }}
                   className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
+                    n.post?._id ? 'cursor-pointer' : ''
+                  } ${
                     !n.isRead
                       ? 'bg-blue-50 border-blue-100 shadow-sm'
                       : 'bg-white border-gray-100 hover:border-gray-200'
@@ -93,7 +123,9 @@ const NotificationsPage = () => {
                   {/* Message */}
                   <div className="flex-1 min-w-0">
                       {/* For event_request, show the full message as the body */}
-                      {n.type === 'event_request' ? (
+                      {SELF_CONTAINED.has(n.type) ? (
+                        <p className="text-sm text-gray-900 leading-snug">{n.message}</p>
+                      ) : n.type === 'event_request' ? (
                         <p className="text-sm text-gray-900 leading-snug">
                           <span className="font-semibold">{n.sender?.displayName || 'Someone'}</span>{' sent an event request — '}
                           {n.message?.split(':').slice(1).join(':').trim() || n.message}

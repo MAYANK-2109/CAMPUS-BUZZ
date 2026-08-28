@@ -7,6 +7,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { PenSquare, Megaphone, Home, Sparkles } from 'lucide-react';
 import PostCard        from '../components/PostCard';
 import CreatePostForm  from '../components/CreatePostForm';
@@ -76,6 +77,36 @@ const FeedPage = () => {
   const [showForm,  setShowForm]  = useState(false);
 
   const feed = usePostFeed(clubMode);
+
+  /**
+   * Deep link: /feed?post=<id>
+   *
+   * Notifications tell people to "check the post to verify", so they have to be
+   * able to land on it. The target is usually not on page 1 of the feed (and
+   * with pagination may not be reachable at all), so it is fetched directly and
+   * pinned above the feed rather than scrolled to.
+   */
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [focusedPost, setFocusedPost] = useState(null);
+  const [focusError,  setFocusError]  = useState('');
+
+  useEffect(() => {
+    const id = new URLSearchParams(location.search).get('post');
+    if (!id) { setFocusedPost(null); setFocusError(''); return; }
+
+    let cancelled = false;
+    setFocusError('');
+    api.get(`/posts/${id}`)
+      .then(({ data }) => { if (!cancelled) setFocusedPost(data.data); })
+      .catch(() => {
+        // Deleted, expired, or sold since the notification was sent.
+        if (!cancelled) { setFocusedPost(null); setFocusError('That post is no longer available.'); }
+      });
+    return () => { cancelled = true; };
+  }, [location.search]);
+
+  const clearFocus = () => { setFocusedPost(null); setFocusError(''); navigate('/feed', { replace: true }); };
 
   const toggleClubMode = () => {
     setAnimOut(true);
@@ -303,6 +334,28 @@ const FeedPage = () => {
           </div>
         ) : (
           <>
+            {/* Deep-linked post, pinned above the feed */}
+            {focusError && (
+              <div className="mb-3 flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
+                <span>{focusError}</span>
+                <button onClick={clearFocus} className="font-semibold hover:underline">Dismiss</button>
+              </div>
+            )}
+            {focusedPost && (
+              <div className="mb-4">
+                <div className="flex items-center justify-between gap-3 px-4 py-2 rounded-t-xl bg-teal-50 border border-b-0 border-teal-200 text-xs font-semibold text-teal-700">
+                  <span>Showing the post from your notification</span>
+                  <button onClick={clearFocus} className="hover:underline">Back to feed</button>
+                </div>
+                <div className="ring-2 ring-teal-300 rounded-b-xl overflow-hidden">
+                  <PostCard
+                    post={focusedPost}
+                    onPostDeleted={() => clearFocus()}
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="space-y-0">
               {feed.posts.map((post, i) => (
                 <div key={post._id} className="feed-slide-in" style={{ animationDelay: `${i * 35}ms` }}>
