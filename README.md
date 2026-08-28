@@ -26,7 +26,7 @@
 [![Socket.io](https://img.shields.io/badge/Socket.io-4.8-010101?style=flat-square&logo=socket.io&logoColor=white)](https://socket.io)
 [![Express](https://img.shields.io/badge/Express-4.21-000000?style=flat-square&logo=express&logoColor=white)](https://expressjs.com)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
-
+.
 <br />
 
 **[🌐 Live App](https://campus-buzz-iota.vercel.app/)** · **[🎬 Video Demo](https://drive.google.com/drive/folders/12sLIhtUqlvR8WThyVVnPdKA7BpHnj9MX?usp=drive_link)** · **[🗺️ Data Flow](./DATA_FLOW.md)** · **[📡 API Reference](./docs/API.md)**
