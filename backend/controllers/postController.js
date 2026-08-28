@@ -19,6 +19,7 @@ const User         = require('../models/User');
 const Notification = require('../models/Notification');
 const ChatRoom     = require('../models/ChatRoom');
 const { emitNotifications } = require('../socket');
+const { extractKeywords, runLostFoundMatch } = require('../utils/lostFoundMatcher');
 
 // ── Allowed time-sensitive hashtags that need an expiresAt ───────────────────
 const TIMED_HASHTAGS = new Set(['#foodsplit', '#cabsplit']);
@@ -26,6 +27,9 @@ const TIMED_HASHTAGS = new Set(['#foodsplit', '#cabsplit']);
 // ── Hashtags that automatically get a Socket.io chat room ───────────────────
 // (mirrors the same set in socket/index.js)
 const CHAT_HASHTAGS = new Set(['#foodsplit', '#cabsplit', '#resell']);
+
+// ── Hashtags that participate in keyword matching (utils/lostFoundMatcher) ──
+const LOST_FOUND_HASHTAGS = new Set(['#lost', '#found']);
 
 // ── Feed-ranking constants (tunable via env or query params) ──────────────────
 const DEFAULT_G = 0.8;   // gravity   – higher = popularity wins more
@@ -288,6 +292,8 @@ exports.createPost = async (req, res) => {
       totalFare:  hashtag === '#cabsplit' && totalFare ? Number(totalFare) : null,
       linkedEvent: req.body.linkedEvent || null,
       moderation: buildModerationDoc(req.moderation),
+      // Only #lost / #found are matched, so only they need keywords stored.
+      keywords: LOST_FOUND_HASHTAGS.has(hashtag) ? extractKeywords(title, description) : [],
     });
 
     // ── Auto-create a ChatRoom for chat-enabled posts ────────────────────────
@@ -324,6 +330,14 @@ exports.createPost = async (req, res) => {
       { path: 'author', select: 'displayName role instituteEmail rollNo avatarUrl' },
       { path: 'mentions', select: 'displayName _id' }
     ]);
+
+    // ── Lost & Found auto-match ──────────────────────────────────────────────
+    // Fires immediately after the post is saved, against active posts in the
+    // opposite category. Not awaited: the matcher swallows its own errors, and
+    // the author should not wait on a candidate scan to see their post appear.
+    if (LOST_FOUND_HASHTAGS.has(hashtag)) {
+      runLostFoundMatch(post);
+    }
 
     // ── Moderation follow-up ─────────────────────────────────────────────────
     // The post is already saved. Flagged posts stay visible while an Admin
@@ -600,6 +614,13 @@ exports.updatePost = async (req, res) => {
         post[field] = req.body[field];
       }
     });
+
+    // Keywords are derived from title + description, so an edit that changes
+    // either must refresh them. Without this a corrected post ("blue" → "black")
+    // keeps matching on the wrong word for the rest of its life.
+    if (LOST_FOUND_HASHTAGS.has(post.hashtag)) {
+      post.keywords = extractKeywords(post.title, post.description);
+    }
 
     // Edits are re-moderated by the same middleware on this route. Without
     // that, "post something clean, then edit in the abuse" is a one-step

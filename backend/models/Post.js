@@ -61,6 +61,19 @@ const PostSchema = new mongoose.Schema(
       default: [],
     },
 
+    /**
+     * keywords: sanitised, stop-word-free tokens from title + description.
+     * Written on create and refreshed on edit by utils/lostFoundMatcher.
+     *
+     * Stored rather than derived so #lost/#found matching is one indexed $in
+     * lookup instead of re-tokenising every existing post on every submission.
+     * Only meaningful for #lost and #found; other hashtags leave it empty.
+     */
+    keywords: {
+      type:    [String],
+      default: [],
+    },
+
     likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     dislikes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 
@@ -169,6 +182,11 @@ PostSchema.index({ hashtag: 1, expiresAt: 1, isActive: 1 });
 
 // ── Index for the Admin moderation queue (flagged posts, newest first) ───────
 PostSchema.index({ 'moderation.status': 1, createdAt: -1 });
+
+// ── Multikey index backing the #lost/#found keyword match ───────────────────
+// Compound so the candidate scan is already narrowed to active posts of the
+// opposite category before any keyword comparison happens.
+PostSchema.index({ hashtag: 1, isActive: 1, keywords: 1 });
 
 // ── Virtual: is this post currently expired? ─────────────────────────────────
 PostSchema.virtual('isExpired').get(function isExpired() {
