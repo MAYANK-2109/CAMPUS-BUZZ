@@ -1,15 +1,51 @@
 /**
  * controllers/complaintController.js
  * ─────────────────────────────────────────────────────────────────────────────
- * Handles campus complaints with role-dependent author visibility.
+ * Handles campus complaints with selective admin author visibility.
  *
- * GET  /api/complaints      → Students receive list WITHOUT author field.
- *                             Admins receive list WITH populated author.
+ * GET  /api/complaints      → Returns complaints to everyone.
+ *                             Author is shown ONLY to admins whose _id is in
+ *                             the complaint's visibleToAdmins list.
  * POST /api/complaints      → Any authenticated user can file a complaint.
- * PATCH /api/complaints/:id → Admin only: update status (Open → Resolved).
+ *                             REQUIRED: visibleToAdmins must contain at least
+ *                             one valid Admin user ID.
+ * PATCH /api/complaints/:id → Admin or original author: update status.
  */
 
 const Complaint = require('../models/Complaint');
+const User      = require('../models/User');
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Strip author from a complaint object unless the requesting user's _id
+ * appears in visibleToAdmins.
+ *
+ * @param {Object} obj        - Plain JS object (from .toObject() or .lean())
+ * @param {Object} reqUser    - req.user from the protect middleware
+ * @returns {Object}          - Safe object for the API response
+ */
+const safeComplaintObj = (obj, reqUser) => {
+  const isAdmin = reqUser?.role === 'Admin';
+  const userId  = reqUser?._id?.toString();
+
+  const allowedAdminIds = (obj.visibleToAdmins || []).map((id) =>
+    id?._id ? id._id.toString() : id.toString()
+  );
+
+  const canSeeAuthor = isAdmin && allowedAdminIds.includes(userId);
+
+  const result = { ...obj };
+
+  if (!canSeeAuthor) {
+    delete result.author;
+  }
+
+  // Never expose the visibleToAdmins list to the client
+  delete result.visibleToAdmins;
+
+  return result;
+};
 
 // ── GET /api/complaints ───────────────────────────────────────────────────────
 exports.getComplaints = async (req, res) => {
@@ -21,26 +57,22 @@ exports.getComplaints = async (req, res) => {
     const filter = {};
     if (req.query.status) filter.status = req.query.status;
 
-    // ── PRIVACY RULE ──────────────────────────────────────────────────────────
-    // Complaints are completely anonymous for everyone, including Admins.
-
-    let query = Complaint.find(filter)
+    // Always fetch visibleToAdmins so we can gate per-admin disclosure,
+    // but we never send the raw array to the client.
+    const query = Complaint.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .select('-author');
+      .populate('author', 'displayName avatarUrl instituteEmail rollNo');
 
     const [complaints, total] = await Promise.all([
       query.exec(),
       Complaint.countDocuments(filter),
     ]);
 
-    // Strip author from the response payload for all users.
-    const safeComplaints = complaints.map((c) => {
-      const obj = c.toObject();
-      delete obj.author;   // <-- Author anonymised
-      return obj;
-    });
+    const safeComplaints = complaints.map((c) =>
+      safeComplaintObj(c.toObject(), req.user)
+    );
 
     return res.status(200).json({
       success: true,
@@ -61,7 +93,7 @@ exports.getComplaints = async (req, res) => {
 // ── POST /api/complaints ──────────────────────────────────────────────────────
 exports.createComplaint = async (req, res) => {
   try {
-    const { title, description } = req.body;
+    const { title, description, visibleToAdmins } = req.body;
 
     if (!title || !description) {
       return res.status(400).json({
@@ -70,17 +102,48 @@ exports.createComplaint = async (req, res) => {
       });
     }
 
+    // ── Validate visibleToAdmins (required, non-empty) ────────────────────────
+    if (
+      !visibleToAdmins ||
+      !Array.isArray(visibleToAdmins) ||
+      visibleToAdmins.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'You must select at least one admin who can see your identity.',
+      });
+    }
+
+    // Deduplicate
+    const uniqueAdminIds = [...new Set(visibleToAdmins.map(String))];
+
+    // Verify each ID belongs to an actual Admin user
+    const adminUsers = await User.find({
+      _id:  { $in: uniqueAdminIds },
+      role: 'Admin',
+    }).select('_id');
+
+    if (adminUsers.length !== uniqueAdminIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'One or more selected users are not valid admins.',
+      });
+    }
+
     const complaint = await Complaint.create({
       title,
       description,
-      author: req.user._id,
-      status: 'Open',
+      author:          req.user._id,
+      status:          'Open',
+      visibleToAdmins: uniqueAdminIds,
     });
 
-    // Return the complaint without author populated (anonymity from creation)
-    const { author: _stripped, ...safeComplaint } = complaint.toObject();
+    // Return without author (anonymity from creation) and without visibleToAdmins
+    const obj = complaint.toObject();
+    delete obj.author;
+    delete obj.visibleToAdmins;
 
-    return res.status(201).json({ success: true, data: safeComplaint });
+    return res.status(201).json({ success: true, data: obj });
   } catch (err) {
     console.error('[complaintController.createComplaint]', err);
     if (err.name === 'ValidationError') {
@@ -122,10 +185,9 @@ exports.updateComplaintStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Complaint not found.' });
     }
 
-    const isAdmin = req.user.role === 'Admin';
+    const isAdmin  = req.user.role === 'Admin';
     const isAuthor = complaint.author.toString() === req.user._id.toString();
 
-    // Check authorization: Admin can set any status, student author can only verify or reopen
     if (!isAdmin && !isAuthor) {
       return res.status(403).json({ success: false, message: 'Not authorized to update this complaint.' });
     }
@@ -148,7 +210,8 @@ exports.updateComplaintStatus = async (req, res) => {
     await complaint.save();
 
     const obj = complaint.toObject();
-    delete obj.author; // Anonymised
+    delete obj.author;
+    delete obj.visibleToAdmins;
 
     return res.status(200).json({ success: true, data: obj });
   } catch (err) {
@@ -191,7 +254,6 @@ exports.upvoteComplaint = async (req, res) => {
 };
 
 // ── GET /api/complaints/search  – title keyword search (for duplicate check) ──
-// Stop words filtered client-side too, but we also ignore them server-side.
 const STOP_WORDS = new Set([
   'a','an','the','is','are','was','were','has','have','had','be','been','being',
   'do','does','did','will','would','could','should','may','might','shall','can',
@@ -207,7 +269,6 @@ exports.searchComplaints = async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
-    // Extract meaningful keywords
     const keywords = raw
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, '')
@@ -216,7 +277,6 @@ exports.searchComplaints = async (req, res) => {
 
     if (!keywords.length) return res.json({ success: true, data: [] });
 
-    // Build OR regex query across keywords
     const regexes = keywords.map(k => new RegExp(k, 'i'));
     const complaints = await Complaint.find({
       title: { $in: regexes },
@@ -226,7 +286,6 @@ exports.searchComplaints = async (req, res) => {
       .limit(5)
       .lean();
 
-    // Strip upvotes array, just return count
     const result = complaints.map(c => ({
       ...c,
       upvoteCount: (c.upvotes || []).length,
@@ -253,7 +312,6 @@ exports.editComplaint = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Complaint not found.' });
     }
 
-    // Only the original author may edit
     if (complaint.author.toString() !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: 'Only the author can edit this complaint.' });
     }
@@ -264,9 +322,9 @@ exports.editComplaint = async (req, res) => {
 
     await complaint.save();
 
-    // Strip author before returning (anonymity)
     const obj = complaint.toObject();
     delete obj.author;
+    delete obj.visibleToAdmins;
     return res.status(200).json({ success: true, data: obj });
   } catch (err) {
     console.error('[complaintController.editComplaint]', err);

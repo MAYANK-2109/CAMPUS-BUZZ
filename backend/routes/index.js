@@ -233,6 +233,22 @@ router.get('/clubs', protect, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════════
+// ADMINS route  (/api/admins)  – list Admin accounts for the complaint privacy picker
+// ════════════════════════════════════════════════════════════════════════════════
+router.get('/admins', protect, async (req, res) => {
+  try {
+    const admins = await User.find({ role: 'Admin' })
+      .select('_id displayName avatarUrl instituteEmail')
+      .sort({ displayName: 1 })
+      .lean();
+    return res.json({ success: true, data: admins });
+  } catch (err) {
+    console.error('[admins]', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch admins.' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
 // CHAT ROOM routes  (/api/chat-rooms/…  and  /api/rooms/…)
 // ════════════════════════════════════════════════════════════════════════════════
 const ChatRoom = require('../models/ChatRoom');

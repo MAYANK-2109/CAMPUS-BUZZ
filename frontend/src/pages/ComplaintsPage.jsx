@@ -2,11 +2,12 @@
  * src/pages/ComplaintsPage.jsx
  * ─────────────────────────────────────────────────────────────────────────────
  * Anonymous complaints board.
- * Features: upvotes, similar-complaint detection while filing, author edit.
+ * Features: upvotes, similar-complaint detection while filing, author edit,
+ *           selective admin identity disclosure (at least one admin required).
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ThumbsUp, Pencil, X, Check } from 'lucide-react';
+import { ThumbsUp, Pencil, X, Check, ShieldCheck, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import api         from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -111,13 +112,149 @@ const InlineEditForm = ({ complaint, onSaved, onCancel }) => {
   );
 };
 
+/* ─── AdminPicker ──────────────────────────────────────────────────────────── */
+/**
+ * Multi-select checklist for picking which admins can see the author identity.
+ * Shows avatar + displayName for each admin. Supports search filtering.
+ * Enforces: at least one admin must be selected.
+ */
+const AdminPicker = ({ admins, selected, onChange, error }) => {
+  const [open,   setOpen]   = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const filtered = admins.filter(a =>
+    !search.trim() ||
+    (a.displayName || a.instituteEmail || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggle = (id) => {
+    const set = new Set(selected);
+    if (set.has(id)) set.delete(id);
+    else             set.add(id);
+    onChange([...set]);
+  };
+
+  const selectedAdmins = admins.filter(a => selected.includes(a._id));
+
+  return (
+    <div ref={ref} className="relative">
+      {/* Trigger button */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+          error
+            ? 'border-red-400 bg-red-50 text-red-700'
+            : selected.length > 0
+              ? 'border-indigo-400 bg-indigo-50 text-indigo-800'
+              : 'border-gray-300 bg-white text-gray-500 hover:border-gray-400'
+        }`}
+      >
+        <span className="flex items-center gap-2 flex-1 min-w-0">
+          <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+          {selected.length === 0
+            ? 'Select admins who can see your identity…'
+            : selected.length === admins.length
+              ? `All admins (${admins.length})`
+              : selectedAdmins.map(a => a.displayName || a.instituteEmail).join(', ')
+          }
+        </span>
+        {open ? <ChevronUp className="w-4 h-4 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 flex-shrink-0" />}
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+          {/* Search inside dropdown */}
+          {admins.length > 4 && (
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-3 py-2">
+              <div className="flex items-center gap-2 text-gray-400">
+                <Search className="w-3.5 h-3.5 flex-shrink-0" />
+                <input
+                  className="w-full text-sm outline-none text-gray-700 placeholder-gray-400"
+                  placeholder="Search admins…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                />
+              </div>
+            </div>
+          )}
+
+          {filtered.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-gray-400">No admins found.</p>
+          ) : (
+            filtered.map(admin => {
+              const isSelected = selected.includes(admin._id);
+              return (
+                <label
+                  key={admin._id}
+                  className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors ${
+                    isSelected ? 'bg-indigo-50/60' : ''
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggle(admin._id)}
+                    className="w-4 h-4 rounded accent-indigo-600"
+                  />
+                  {admin.avatarUrl ? (
+                    <img src={admin.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-indigo-700">
+                        {(admin.displayName || admin.instituteEmail || '?')[0].toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">
+                      {admin.displayName || admin.instituteEmail}
+                    </p>
+                    {admin.displayName && (
+                      <p className="text-[10px] text-gray-400 truncate">{admin.instituteEmail}</p>
+                    )}
+                  </div>
+                </label>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* Validation hint */}
+      {error && (
+        <p className="mt-1 text-xs text-red-600 flex items-center gap-1">
+          <span>⚠</span> {error}
+        </p>
+      )}
+      {!error && selected.length > 0 && (
+        <p className="mt-1 text-[10px] text-indigo-600">
+          Your identity will only be visible to {selected.length === 1 ? 'this admin' : `these ${selected.length} admins`}.
+        </p>
+      )}
+    </div>
+  );
+};
+
 /* ─── Main page ────────────────────────────────────────────────────────────── */
 const ComplaintsPage = () => {
   const { user }  = useAuth();
   const isAdmin   = user?.role === 'Admin';
 
   const [complaints, setComplaints] = useState([]);
-  const [myIds,       setMyIds]       = useState(new Set());   // IDs filed by current user
+  const [myIds,       setMyIds]       = useState(new Set());
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState('');
   const [showForm,   setShowForm]   = useState(false);
@@ -126,7 +263,13 @@ const ComplaintsPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [formError,  setFormError]  = useState('');
 
-  // Similar complaints (shown while typing title)
+  // Admin picker state
+  const [admins,            setAdmins]            = useState([]);
+  const [selectedAdminIds,  setSelectedAdminIds]  = useState([]);
+  const [adminPickerError,  setAdminPickerError]  = useState('');
+  const [loadingAdmins,     setLoadingAdmins]     = useState(false);
+
+  // Similar complaints
   const [similar,      setSimilar]      = useState([]);
   const [searchingDup, setSearchingDup] = useState(false);
   const dupTimer = useRef(null);
@@ -165,6 +308,21 @@ const ComplaintsPage = () => {
 
   useEffect(() => { fetchComplaints(); }, [fetchComplaints]);
 
+  // Fetch admins when modal is opened
+  const openForm = async () => {
+    setShowForm(true);
+    if (admins.length > 0) return; // already fetched
+    setLoadingAdmins(true);
+    try {
+      const { data } = await api.get('/admins');
+      setAdmins(data.data || []);
+    } catch {
+      setAdmins([]);
+    } finally {
+      setLoadingAdmins(false);
+    }
+  };
+
   // Live duplicate search as user types the title
   const handleTitleChange = (val) => {
     setForm(p => ({ ...p, title: val }));
@@ -183,14 +341,26 @@ const ComplaintsPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitting(true);
     setFormError('');
+    setAdminPickerError('');
+
+    // Enforce at least one admin
+    if (selectedAdminIds.length === 0) {
+      setAdminPickerError('Please select at least one admin who can see your identity.');
+      return;
+    }
+
+    setSubmitting(true);
     try {
-      const { data } = await api.post('/complaints', form);
+      const { data } = await api.post('/complaints', {
+        ...form,
+        visibleToAdmins: selectedAdminIds,
+      });
       const newId = data.data._id;
       setMyIds((prev) => new Set([...prev, newId]));
       setComplaints(prev => [data.data, ...prev]);
       setForm({ title: '', description: '' });
+      setSelectedAdminIds([]);
       setSimilar([]);
       setShowForm(false);
     } catch (err) {
@@ -244,7 +414,6 @@ const ComplaintsPage = () => {
     }
   };
 
-  // Upvote directly from the "similar complaints" suggestion panel
   const handleSimilarUpvote = async (id) => {
     try {
       const { data } = await api.post(`/complaints/${id}/upvote`);
@@ -252,7 +421,14 @@ const ComplaintsPage = () => {
     } catch { /* silent */ }
   };
 
-  const closeForm = () => { setShowForm(false); setSimilar([]); setForm({ title: '', description: '' }); };
+  const closeForm = () => {
+    setShowForm(false);
+    setSimilar([]);
+    setForm({ title: '', description: '' });
+    setSelectedAdminIds([]);
+    setAdminPickerError('');
+    setFormError('');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 pb-12">
@@ -263,11 +439,11 @@ const ComplaintsPage = () => {
           <div>
             <h1 className="text-xl font-bold text-gray-900">Complaints</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              {isAdmin ? 'Visible to Admins only.' : 'Completely anonymous board.'}
+              {isAdmin ? 'Complaints board — identity visible only where you were selected.' : 'Completely anonymous board.'}
             </p>
           </div>
           <button
-            onClick={() => setShowForm(true)}
+            onClick={openForm}
             className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
           >
             File Issue
@@ -278,7 +454,9 @@ const ComplaintsPage = () => {
         {!isAdmin && (
           <div className="mb-6 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-800 flex items-start gap-3 shadow-sm">
             <span className="text-xl leading-none">🛡️</span>
-            <span>Author information is stripped server-side. Your complaint is fully anonymous.</span>
+            <span>
+              Your complaint is shown anonymously to everyone. You choose which admins can see <strong>who</strong> filed it — at least one admin is required.
+            </span>
           </div>
         )}
 
@@ -331,11 +509,11 @@ const ComplaintsPage = () => {
             <p className="text-sm text-gray-500 max-w-xs mb-6 leading-relaxed">
               {filter
                 ? `No complaints with status "${filter}" have been filed yet. Try a different filter.`
-                : 'Be the first to raise an issue. All complaints are anonymous — your identity is never stored.'}
+                : 'Be the first to raise an issue. All complaints are anonymous — your identity is never exposed without your consent.'}
             </p>
             {!filter && (
               <button
-                onClick={() => setShowForm(true)}
+                onClick={openForm}
                 className="px-6 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-full transition-all shadow-md hover:shadow-lg active:scale-95"
               >
                 📢 File the First Issue
@@ -345,10 +523,12 @@ const ComplaintsPage = () => {
         ) : (
           <div className="space-y-4">
             {complaints.map(c => {
-              const isAuthor  = c.author?._id === user?._id || (!c.author && false); // author is stripped for non-admins
               const myUpvotes = (c.upvotes || []).map(id => id?.toString()).filter(Boolean);
               const voted     = myUpvotes.includes(user?._id?.toString());
               const count     = (c.upvotes || []).length;
+
+              // If the backend returned an author object, this admin is in visibleToAdmins
+              const authorInfo = c.author && typeof c.author === 'object' ? c.author : null;
 
               return (
                 <div key={c._id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
@@ -367,7 +547,40 @@ const ComplaintsPage = () => {
                             My Complaint
                           </span>
                         )}
+                        {/* Identity-revealed chip — only shown to the selected admin */}
+                        {isAdmin && authorInfo && (
+                          <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-violet-100 text-violet-800 border border-violet-200 uppercase tracking-wider">
+                            <ShieldCheck className="w-3 h-3" />
+                            Identity Revealed
+                          </span>
+                        )}
                       </div>
+
+                      {/* Author info — only for the specifically selected admin */}
+                      {isAdmin && authorInfo && (
+                        <div className="mb-3 flex items-center gap-2 bg-violet-50 border border-violet-100 rounded-lg px-3 py-2">
+                          {authorInfo.avatarUrl ? (
+                            <img src={authorInfo.avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-violet-200 flex items-center justify-center flex-shrink-0">
+                              <span className="text-[10px] font-bold text-violet-700">
+                                {(authorInfo.displayName || authorInfo.instituteEmail || '?')[0].toUpperCase()}
+                              </span>
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-violet-900 truncate">
+                              {authorInfo.displayName || authorInfo.instituteEmail}
+                            </p>
+                            {authorInfo.displayName && authorInfo.instituteEmail && (
+                              <p className="text-[10px] text-violet-500 truncate">{authorInfo.instituteEmail}</p>
+                            )}
+                            {authorInfo.rollNo && (
+                              <p className="text-[10px] text-violet-500">{authorInfo.rollNo}</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {editingId === c._id ? (
                         <InlineEditForm
@@ -383,7 +596,7 @@ const ComplaintsPage = () => {
                           <h3 className="font-semibold text-gray-900 text-base">{c.title}</h3>
                           <p className="text-gray-700 text-sm mt-1.5 leading-relaxed">{c.description}</p>
 
-                           {c.status === 'Resolved (Verified)' && (
+                          {c.status === 'Resolved (Verified)' && (
                             <div className="mt-3 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-xs font-semibold text-green-800">
                               <span className="text-sm">✅</span>
                               <span>Resolution verified by author.</span>
@@ -551,9 +764,52 @@ const ComplaintsPage = () => {
                 required
               />
 
-              <button type="submit" disabled={submitting} className="w-full btn-primary bg-gray-900 hover:bg-gray-800 text-white mt-2">
+              {/* ── Admin Identity Picker ─────────────────────────────────── */}
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+                <div>
+                  <p className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                    Who can see your identity?
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    The complaint itself is visible to everyone. Only the admins you pick here will know it came from you.
+                    <strong className="text-red-600"> Selecting at least one admin is required.</strong>
+                  </p>
+                </div>
+
+                {loadingAdmins ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+                    <div className="w-4 h-4 border-2 border-gray-300 border-t-indigo-500 rounded-full animate-spin" />
+                    Loading admins…
+                  </div>
+                ) : admins.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-1">No admins available.</p>
+                ) : (
+                  <AdminPicker
+                    admins={admins}
+                    selected={selectedAdminIds}
+                    onChange={(ids) => {
+                      setSelectedAdminIds(ids);
+                      if (ids.length > 0) setAdminPickerError('');
+                    }}
+                    error={adminPickerError}
+                  />
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting || selectedAdminIds.length === 0}
+                className="w-full btn-primary bg-gray-900 hover:bg-gray-800 text-white mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 {submitting ? 'Submitting…' : 'Submit Anonymously'}
               </button>
+
+              {selectedAdminIds.length === 0 && !submitting && (
+                <p className="text-center text-xs text-gray-400">
+                  Select at least one admin above to enable submission.
+                </p>
+              )}
             </form>
           </div>
         </div>

@@ -4,8 +4,9 @@
  * Anonymous complaints submitted by students.
  *
  * Privacy rule (enforced in controller, NOT schema):
- *   - Students querying GET /complaints receive the list WITHOUT the author field.
- *   - Admins receive the full populated author.
+ *   - Non-admins querying GET /complaints receive the list WITHOUT the author field.
+ *   - Admins receive the populated author ONLY if their _id is in visibleToAdmins.
+ *   - At least one admin must be listed in visibleToAdmins (enforced in controller).
  *
  * This keeps the logic in one place (controller) and the schema clean.
  */
@@ -59,6 +60,21 @@ const ComplaintSchema = new mongoose.Schema(
     isEdited: {
       type:    Boolean,
       default: false,
+    },
+
+    /**
+     * visibleToAdmins
+     * ───────────────
+     * Array of Admin User _ids that the complaint submitter has explicitly
+     * authorised to see their identity.  At least one entry is required
+     * (enforced by the controller at creation time).
+     *
+     * All other users — including admins NOT in this list — receive the
+     * complaint without any author information.
+     */
+    visibleToAdmins: {
+      type:    [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
     },
   },
   {
