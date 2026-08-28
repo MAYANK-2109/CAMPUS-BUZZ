@@ -351,13 +351,13 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
         )}
 
         {/* ── Action Bar (Instagram-style) ──────────────────────────────────── */}
-        <div className="px-4 pt-3 pb-1">
-          <div className="flex items-center gap-4">
+        <div className="px-3 sm:px-4 pt-3 pb-1">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
             {/* Like */}
             <button
               onClick={handleLike}
               disabled={liking}
-              className={`flex items-center gap-1.5 group transition-transform active:scale-90 ${liking ? 'opacity-50' : ''}`}
+              className={`flex items-center gap-1 sm:gap-1.5 py-2 group transition-transform active:scale-90 flex-shrink-0 ${liking ? 'opacity-50' : ''}`}
               aria-label="Like"
             >
               <Heart
@@ -375,7 +375,7 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
             {/* Comment */}
             <button
               onClick={() => setShowComments(v => !v)}
-              className="flex items-center gap-1.5 group transition-transform active:scale-90"
+              className="flex items-center gap-1 sm:gap-1.5 py-2 group transition-transform active:scale-90 flex-shrink-0"
               aria-label="Comment"
             >
               <MessageCircle className={`w-6 h-6 transition-colors ${showComments ? 'text-blue-500' : 'text-gray-700 group-hover:text-blue-500'}`} />
@@ -385,7 +385,7 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
             <button
               onClick={handleDislike}
               disabled={disliking}
-              className={`flex items-center gap-1.5 group transition-transform active:scale-90 ${disliking ? 'opacity-50' : ''}`}
+              className={`flex items-center gap-1 sm:gap-1.5 py-2 group transition-transform active:scale-90 flex-shrink-0 ${disliking ? 'opacity-50' : ''}`}
               aria-label="Dislike"
             >
               <ThumbsDown
@@ -404,7 +404,8 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
             {ctaLabel && !isExpired && (
               <button
                 onClick={handleHashtagAction}
-                className="text-xs font-semibold px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full transition-colors"
+                className="order-last sm:order-none w-full sm:w-auto text-xs font-semibold px-3 py-1.5 mb-1 sm:mb-0 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full transition-colors whitespace-nowrap"
+                title={ctaLabel}
               >
                 {ctaLabel}
               </button>
@@ -419,12 +420,12 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
             )}
 
             {/* ── Right-side actions: Share + Save ─────────────────────────── */}
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-1 sm:gap-2 flex-shrink-0">
               {/* Share */}
               <div className="relative">
                 <button
                   onClick={handleShare}
-                  className="p-1.5 group transition-transform active:scale-90 rounded-full hover:bg-gray-100"
+                  className="p-2.5 group transition-transform active:scale-90 rounded-full hover:bg-gray-100"
                   aria-label="Share post"
                   title="Copy link"
                 >
@@ -447,7 +448,7 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className={`p-1.5 group transition-transform active:scale-90 rounded-full hover:bg-amber-50 ${
+                className={`p-2.5 group transition-transform active:scale-90 rounded-full hover:bg-amber-50 ${
                   saving ? 'opacity-50' : ''
                 }`}
                 aria-label={isSaved ? 'Unsave post' : 'Save post'}

@@ -38,13 +38,10 @@
 ---
 
 ## 👥 Team UNKNOWNS (Contributors)
-
-| Contributor | Role |
-|:------------|:-----|
-| Mayank Kumar Sahu | Team member |
-| Nandish Agarwal | Team member |
-| Nikhil Kumar Singh | Team member |
-| Mayank Kumar Chandrikapure | Team lead (L) |
+- Mayank Kumar Sahu
+- Nandish Agarwal
+- Nikhil Kumar Singh
+- Mayank Kumar Chandrikapure (L)
 
 ---
 
