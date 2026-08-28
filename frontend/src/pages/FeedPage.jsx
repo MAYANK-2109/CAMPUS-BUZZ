@@ -108,6 +108,24 @@ const FeedPage = () => {
 
   const clearFocus = () => { setFocusedPost(null); setFocusError(''); navigate('/feed', { replace: true }); };
 
+  /**
+   * Deep link: /feed?hashtag=%23foodsplit
+   *
+   * Find BOT answers "I'm hungry" with a Food Split button, and that button has
+   * to land on the food-split filter rather than the unfiltered feed. Applied
+   * once per URL change; the filter is left alone afterwards so the user can
+   * still change it by hand.
+   */
+  useEffect(() => {
+    const tag = new URLSearchParams(location.search).get('hashtag');
+    if (tag && HASHTAG_FILTERS.includes(tag) && tag !== feed.filter) {
+      feed.handleFilterChange(tag);
+    }
+    // Keyed on location.search only, on purpose: including feed.filter would
+    // re-run on every filter change and fight the user each time they picked a
+    // different tab by hand.
+  }, [location.search]);
+
   const toggleClubMode = () => {
     setAnimOut(true);
     setTimeout(() => {

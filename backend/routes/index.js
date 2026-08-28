@@ -34,6 +34,7 @@ const router = require('express').Router();
 const { protect }                       = require('../middleware/auth');
 const { requireRole, adminOnly, clubOrAdmin } = require('../middleware/rbac');
 const { moderatePost }                  = require('../middleware/moderate');
+const findBot                           = require('../utils/findBot');
 
 // ── Controller imports ────────────────────────────────────────────────────────
 const authController          = require('../controllers/authController');
@@ -103,6 +104,28 @@ router.get('/posts/:id',  protect, postController.getPostById);
 // abuse" bypasses the whole pipeline in one step.
 router.patch('/posts/:id',  protect, moderatePost, postController.updatePost);
 router.delete('/posts/:id', protect, postController.deletePost);
+
+// ── Find BOT ─────────────────────────────────────────────────────────────────
+// Plain-language request in, navigation buttons out. Pure keyword routing —
+// see utils/findBot.js. Authenticated because every destination it can offer
+// is behind a login anyway.
+router.post('/findbot/ask', protect, (req, res) => {
+  try {
+    const { query } = req.body;
+
+    if (typeof query !== 'string' || query.length > 500) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ask me something — up to 500 characters.',
+      });
+    }
+
+    return res.status(200).json({ success: true, data: findBot.ask(query) });
+  } catch (err) {
+    console.error('[findbot/ask]', err);
+    return res.status(500).json({ success: false, message: 'Find BOT is unavailable right now.' });
+  }
+});
 
 // Mark a #resell listing sold: closes its chat room(s) and removes the post.
 router.patch('/posts/:id/sold', protect, postController.markPostSold);
