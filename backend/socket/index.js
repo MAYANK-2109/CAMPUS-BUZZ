@@ -103,13 +103,42 @@ const initSocket = (httpServer) => {
           return socket.emit('roomError', { message: 'This post type does not support chat.' });
         }
 
-        const room = await ChatRoom.findOrCreate(postId);
+        let room = await ChatRoom.findOrCreate(postId);
         if (!room.isActive) return socket.emit('roomError', { message: 'This chat room is no longer active.' });
 
-        await ChatRoom.updateOne(
-          { _id: room._id },
-          { $addToSet: { participants: socket.user._id } }
-        );
+        // Ride Split rooms enforce their seat limit even when a user tries to
+        // enter through the socket directly instead of the REST join button.
+        if (post.hashtag === '#cabsplit' && post.ride?.totalSeats) {
+          const isParticipant = room.participants.some(
+            (id) => id.toString() === socket.user._id.toString()
+          );
+          if (!isParticipant) {
+            const capacityCheckedRoom = await ChatRoom.findOneAndUpdate(
+              {
+                _id: room._id,
+                isActive: true,
+                participants: { $ne: socket.user._id },
+                $expr: {
+                  $lt: [
+                    { $size: { $ifNull: ['$participants', []] } },
+                    post.ride.totalSeats,
+                  ],
+                },
+              },
+              { $addToSet: { participants: socket.user._id } },
+              { new: true }
+            );
+            if (!capacityCheckedRoom) {
+              return socket.emit('roomError', { message: 'This ride is already full.' });
+            }
+            room = capacityCheckedRoom;
+          }
+        } else {
+          await ChatRoom.updateOne(
+            { _id: room._id },
+            { $addToSet: { participants: socket.user._id } }
+          );
+        }
 
         socket.join(postId);
         socket.currentRoom = postId;

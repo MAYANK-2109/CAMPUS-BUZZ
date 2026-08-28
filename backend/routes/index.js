@@ -76,6 +76,10 @@ router.get( '/auth/me',       protect, authController.getMe);
  */
 router.get('/posts',      protect, postController.getPosts);
 router.post('/posts',     protect, moderatePost, postController.createPost);
+
+// Dedicated Ride Split discovery and capacity-aware joining.
+router.get('/rides',          protect, postController.getRides);
+router.post('/rides/:id/join', protect, postController.joinRide);
 // ── GET /api/posts/trending-hashtags ─────────────────────────────────────────
 router.get('/posts/trending-hashtags', protect, async (req, res) => {
   try {

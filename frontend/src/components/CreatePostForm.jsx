@@ -7,7 +7,7 @@ import { X, Image, Hash, Clock, AtSign } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../utils/api';
 
-const HASHTAGS = ['None', '#foodsplit', '#cabsplit', '#resell', '#lost', '#found'];
+const HASHTAGS = ['None', '#foodsplit', '#resell', '#lost', '#found'];
 const TIMED    = new Set(['#foodsplit', '#cabsplit']);
 
 const HASHTAG_COLORS = {

@@ -14,7 +14,7 @@ import AnnouncementStories from '../components/AnnouncementStories';
 import api             from '../utils/api';
 import { useAuth }     from '../context/AuthContext';
 
-const HASHTAG_FILTERS = ['all', '#foodsplit', '#cabsplit', '#resell', '#lost', '#found'];
+const HASHTAG_FILTERS = ['all', '#foodsplit', '#resell', '#lost', '#found'];
 
 /* ─── small hook: fetch posts for a given mode ───────────────────────────── */
 function usePostFeed(isClubMode) {
@@ -31,6 +31,8 @@ function usePostFeed(isClubMode) {
     setError('');
     try {
       const params = new URLSearchParams({ page: pageNum, limit: 10 });
+      // Cab rides live in the dedicated Ride Split discovery flow.
+      params.set('excludeHashtag', '#cabsplit');
       if (isClubMode) {
         params.set('feed', 'club');
       } else {

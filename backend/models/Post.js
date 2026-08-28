@@ -18,6 +18,41 @@ const mongoose = require('mongoose');
 // ── Valid hashtag values ─────────────────────────────────────────────────────
 const HASHTAGS = ['None', '#foodsplit', '#cabsplit', '#resell', '#lost', '#found'];
 
+const RideDetailsSchema = new mongoose.Schema(
+  {
+    from: {
+      type:    String,
+      trim:    true,
+      default: 'NIT Raipur',
+    },
+    destination: {
+      type:      String,
+      trim:      true,
+      maxlength: [120, 'Ride destination cannot exceed 120 characters'],
+    },
+    routeStops: {
+      type:    [String],
+      default: [],
+    },
+    vehicleType: {
+      type:    String,
+      enum:    ['cab', 'auto', 'shared_cab'],
+      default: 'cab',
+    },
+    totalSeats: {
+      type:    Number,
+      min:     [2, 'A ride must have at least 2 total seats'],
+      max:     [12, 'A ride cannot have more than 12 total seats'],
+      default: 4,
+    },
+    departureTime: {
+      type:    Date,
+      default: null,
+    },
+  },
+  { _id: false }
+);
+
 const PostSchema = new mongoose.Schema(
   {
     title: {
@@ -95,6 +130,12 @@ const PostSchema = new mongoose.Schema(
       type:    Number,
       default: null,
       min:     [0, 'Fare cannot be negative'],
+    },
+
+    /** Structured details used by the dedicated Ride Split search flow. */
+    ride: {
+      type:    RideDetailsSchema,
+      default: null,
     },
 
     /**
@@ -179,6 +220,9 @@ PostSchema.index({ isActive: 1, createdAt: -1 });
 
 // ── Index for cron job efficiency ────────────────────────────────────────────
 PostSchema.index({ hashtag: 1, expiresAt: 1, isActive: 1 });
+
+// ── Ride Split search: destination / route overlap + upcoming departure ────
+PostSchema.index({ hashtag: 1, 'ride.departureTime': 1, isActive: 1 });
 
 // ── Index for the Admin moderation queue (flagged posts, newest first) ───────
 PostSchema.index({ 'moderation.status': 1, createdAt: -1 });

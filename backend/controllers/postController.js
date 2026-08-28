@@ -35,6 +35,8 @@ const LOST_FOUND_HASHTAGS = new Set(['#lost', '#found']);
 const DEFAULT_G = 0.8;   // gravity   – higher = popularity wins more
 const DEFAULT_H = 12;    // half-life – hours after which time-boost halves
 
+const escapeRegExp = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // ── Moderation helpers ───────────────────────────────────────────────────────
 // The verdict itself is produced by middleware/moderate.js before this
 // controller runs; everything below is about persisting it and getting a human
@@ -114,6 +116,8 @@ exports.getPosts = async (req, res) => {
     // Hashtag filter
     if (req.query.hashtag && req.query.hashtag !== 'all') {
       matchStage.hashtag = req.query.hashtag;
+    } else if (req.query.excludeHashtag) {
+      matchStage.hashtag = { $ne: req.query.excludeHashtag };
     }
 
     // Club feed: only posts by Club or Admin accounts
@@ -237,15 +241,155 @@ exports.getPosts = async (req, res) => {
 };
 
 
+// ── GET /api/rides ───────────────────────────────────────────────────────────
+// Dedicated Ride Split discovery. A destination matches either the ride's final
+// destination or one of its declared route stops, allowing a rider to join a
+// longer trip that passes through the place they need.
+exports.getRides = async (req, res) => {
+  try {
+    const destination = (req.query.destination || '').trim().slice(0, 120);
+    const match = {
+      hashtag: '#cabsplit',
+      isActive: true,
+      'ride.destination': { $exists: true, $ne: '' },
+      'ride.departureTime': { $gt: new Date() },
+    };
+
+    if (destination) {
+      const destinationRegex = new RegExp(escapeRegExp(destination), 'i');
+      match.$or = [
+        { 'ride.destination': destinationRegex },
+        { 'ride.routeStops': destinationRegex },
+      ];
+    }
+
+    const posts = await Post.find(match)
+      .sort({ 'ride.departureTime': 1 })
+      .limit(50)
+      .populate('author', 'displayName role avatarUrl rollNo')
+      .lean();
+
+    const rooms = await ChatRoom.find({ postId: { $in: posts.map((post) => post._id) } })
+      .select('postId participants isActive')
+      .lean();
+    const roomByPost = new Map(rooms.map((room) => [room.postId.toString(), room]));
+    const userId = req.user._id.toString();
+    const needle = destination.toLocaleLowerCase('en-IN');
+
+    const rides = posts.map((post) => {
+      const room = roomByPost.get(post._id.toString());
+      const participantIds = [...new Set((room?.participants || []).map((id) => id.toString()))];
+      const seatsFilled = participantIds.length || 1;
+      const totalSeats = post.ride?.totalSeats || 4;
+      const destinationMatch = needle && post.ride.destination.toLocaleLowerCase('en-IN').includes(needle);
+
+      return {
+        ...post,
+        seatsFilled,
+        isJoined: participantIds.includes(userId) || post.author?._id?.toString() === userId,
+        isFull: seatsFilled >= totalSeats || room?.isActive === false,
+        matchType: !needle ? 'upcoming' : (destinationMatch ? 'destination' : 'route'),
+      };
+    });
+
+    return res.json({ success: true, data: rides });
+  } catch (err) {
+    console.error('[postController.getRides]', err);
+    return res.status(500).json({ success: false, message: 'Failed to find matching rides.' });
+  }
+};
+
+
+// ── POST /api/rides/:id/join ─────────────────────────────────────────────────
+// Capacity is checked in the same atomic update that adds the participant, so
+// two students cannot claim the final seat at the same time.
+exports.joinRide = async (req, res) => {
+  try {
+    const post = await Post.findOne({
+      _id: req.params.id,
+      hashtag: '#cabsplit',
+      isActive: true,
+      'ride.destination': { $exists: true },
+      'ride.departureTime': { $gt: new Date() },
+    }).select('author ride.totalSeats title');
+
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'This ride is no longer available.' });
+    }
+
+    let room = await ChatRoom.findOne({ postId: post._id });
+    if (!room) {
+      room = await ChatRoom.create({
+        postId: post._id,
+        isGlobal: false,
+        name: post.title,
+        hashtag: '#cabsplit',
+        createdBy: post.author,
+        participants: [post.author],
+        isActive: true,
+      });
+    }
+
+    const userId = req.user._id;
+    const alreadyJoined = room.participants.some((id) => id.toString() === userId.toString());
+    if (alreadyJoined || post.author.toString() === userId.toString()) {
+      return res.json({
+        success: true,
+        alreadyJoined: true,
+        seatsFilled: Math.max(1, new Set(room.participants.map(String)).size),
+      });
+    }
+
+    const totalSeats = post.ride.totalSeats || 4;
+    const updatedRoom = await ChatRoom.findOneAndUpdate(
+      {
+        _id: room._id,
+        isActive: true,
+        participants: { $ne: userId },
+        $expr: {
+          $lt: [
+            { $size: { $ifNull: ['$participants', []] } },
+            totalSeats,
+          ],
+        },
+      },
+      { $addToSet: { participants: userId } },
+      { new: true }
+    );
+
+    if (!updatedRoom) {
+      return res.status(409).json({ success: false, message: 'This ride is already full.' });
+    }
+
+    return res.json({
+      success: true,
+      seatsFilled: new Set(updatedRoom.participants.map(String)).size,
+      message: 'Seat confirmed. You can now coordinate in the ride chat.',
+    });
+  } catch (err) {
+    console.error('[postController.joinRide]', err);
+    if (err.name === 'CastError') {
+      return res.status(400).json({ success: false, message: 'Invalid ride ID.' });
+    }
+    return res.status(500).json({ success: false, message: 'Failed to join this ride.' });
+  }
+};
+
+
 // ── POST /api/posts ───────────────────────────────────────────────────────────
 exports.createPost = async (req, res) => {
   try {
-    let { title, description, imageUrl, hashtag, expiresAt, customTags, totalFare } = req.body;
+    let { title, description, imageUrl, hashtag, expiresAt, customTags, totalFare, ride } = req.body;
 
     // imageUrl is optional — posts without an image render as text-only.
 
     // If no primary hashtag provided, default to 'None'
     hashtag = hashtag || 'None';
+
+    // Dedicated Ride Split posts use their departure as the post expiry.
+    if (hashtag === '#cabsplit' && ride?.departureTime && !expiresAt) {
+      expiresAt = ride.departureTime;
+    }
 
     // expiresAt is required for time-sensitive hashtags
     if (TIMED_HASHTAGS.has(hashtag)) {
@@ -262,6 +406,40 @@ exports.createPost = async (req, res) => {
           message: 'expiresAt must be a future date.',
         });
       }
+    }
+
+    let rideDetails = null;
+    if (hashtag === '#cabsplit' && ride) {
+      const departureTime = new Date(ride.departureTime);
+      const totalSeats = Number(ride.totalSeats);
+      const fare = Number(totalFare);
+      const destination = String(ride.destination || '').trim();
+
+      if (!destination) {
+        return res.status(400).json({ success: false, message: 'Destination is required for a ride.' });
+      }
+      if (Number.isNaN(departureTime.getTime()) || departureTime <= new Date()) {
+        return res.status(400).json({ success: false, message: 'Departure time must be in the future.' });
+      }
+      if (!Number.isInteger(totalSeats) || totalSeats < 2 || totalSeats > 12) {
+        return res.status(400).json({ success: false, message: 'Total seats must be between 2 and 12.' });
+      }
+      if (!Number.isFinite(fare) || fare <= 0) {
+        return res.status(400).json({ success: false, message: 'Total fare must be greater than zero.' });
+      }
+
+      rideDetails = {
+        from: 'NIT Raipur',
+        destination,
+        routeStops: Array.isArray(ride.routeStops)
+          ? ride.routeStops.map((stop) => String(stop).trim()).filter(Boolean).slice(0, 12)
+          : [],
+        vehicleType: ['cab', 'auto', 'shared_cab'].includes(ride.vehicleType)
+          ? ride.vehicleType
+          : 'cab',
+        totalSeats,
+        departureTime,
+      };
     }
 
     // ── Parse @mentions from description ─────────────────────────────────────
@@ -289,7 +467,8 @@ exports.createPost = async (req, res) => {
       customTags: Array.isArray(customTags) ? customTags : [],
       expiresAt:  TIMED_HASHTAGS.has(hashtag) ? new Date(expiresAt) : null,
       mentions:   mentionIds,
-      totalFare:  hashtag === '#cabsplit' && totalFare ? Number(totalFare) : null,
+      totalFare:  hashtag === '#cabsplit' && totalFare != null ? Number(totalFare) : null,
+      ride:       rideDetails,
       linkedEvent: req.body.linkedEvent || null,
       moderation: buildModerationDoc(req.moderation),
       // Only #lost / #found are matched, so only they need keywords stored.
@@ -300,15 +479,25 @@ exports.createPost = async (req, res) => {
     // This ensures the room exists immediately so the first buyer doesn't
     // trigger a race condition on /rooms/from-post/:id.
     if (CHAT_HASHTAGS.has(hashtag)) {
-      ChatRoom.create({
+      const roomPayload = {
         isGlobal:      false,
         postId:        post._id,
         name:          post.title,
         hashtag:       post.hashtag,
         createdBy:     post.author,
+        participants:  rideDetails ? [post.author] : [],
         isActive:      true,
         lastMessageAt: new Date(),
-      }).catch(err => console.error('[postController] ChatRoom auto-create failed:', err.message));
+      };
+
+      // A structured ride must not be discoverable before its capacity record
+      // exists. Other post chats keep the existing non-blocking behaviour.
+      if (rideDetails) {
+        await ChatRoom.create(roomPayload);
+      } else {
+        ChatRoom.create(roomPayload)
+          .catch(err => console.error('[postController] ChatRoom auto-create failed:', err.message));
+      }
     }
 
     // ── Fire mention notifications ────────────────────────────────────────────
