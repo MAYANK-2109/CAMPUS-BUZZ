@@ -12,10 +12,17 @@ import api         from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
 const STATUS_STYLES = {
-  Open:                 'bg-orange-100 text-orange-800 border-orange-200',
-  Resolved:             'bg-amber-100 text-amber-800 border-amber-200',
-  Declined:             'bg-red-100 text-red-800 border-red-200',
-  'Resolved (Verified)': 'bg-green-100 text-green-800 border-green-200',
+  Open:                  'bg-orange-50/90 text-orange-700 border-orange-200/80',
+  Resolved:              'bg-amber-50/90 text-amber-700 border-amber-200/80',
+  Declined:              'bg-rose-50/90 text-rose-700 border-rose-200/80',
+  'Resolved (Verified)': 'bg-emerald-50/90 text-emerald-700 border-emerald-200/80',
+};
+
+const CARD_ACCENT_STYLES = {
+  Open:                  'complaint-card--open',
+  Resolved:              'complaint-card--resolved',
+  Declined:              'complaint-card--declined',
+  'Resolved (Verified)': 'complaint-card--verified',
 };
 
 // Stop words excluded from the similarity search
@@ -52,10 +59,10 @@ const UpvoteButton = ({ complaintId, initialCount, initialVoted, onUpvoted }) =>
     <button
       onClick={toggle}
       disabled={loading}
-      className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+      className={`complaint-upvote flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${
         voted
-          ? 'border-blue-400 bg-blue-50 text-blue-700'
-          : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50'
+          ? 'complaint-upvote--active'
+          : 'complaint-upvote--idle'
       }`}
     >
       <ThumbsUp className="w-3.5 h-3.5" />
@@ -431,7 +438,7 @@ const ComplaintsPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 pb-12">
+    <div className="complaints-surface min-h-screen text-gray-900 pb-12">
       <div className="max-w-2xl mx-auto px-4 py-6">
 
         {/* Header */}
@@ -444,7 +451,7 @@ const ComplaintsPage = () => {
           </div>
           <button
             onClick={openForm}
-            className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
+            className="complaints-primary px-4 py-2 text-white text-sm font-semibold rounded-lg transition-all shadow-sm"
           >
             File Issue
           </button>
@@ -452,7 +459,7 @@ const ComplaintsPage = () => {
 
         {/* Privacy banner */}
         {!isAdmin && (
-          <div className="mb-6 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-800 flex items-start gap-3 shadow-sm">
+          <div className="complaints-privacy-banner mb-6 border rounded-xl px-4 py-3 text-sm text-blue-800 flex items-start gap-3 shadow-sm">
             <span className="text-xl leading-none">🛡️</span>
             <span>
               Your complaint is shown anonymously to everyone. You choose which admins can see <strong>who</strong> filed it — at least one admin is required.
@@ -473,7 +480,7 @@ const ComplaintsPage = () => {
               key={value || 'all'}
               onClick={() => setFilter(value)}
               className={`px-4 py-1.5 text-sm font-semibold rounded-full border transition-all ${
-                filter === value ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                filter === value ? 'complaints-filter-active text-white' : 'bg-white/80 border-gray-200/90 text-gray-600 hover:bg-white hover:border-indigo-200'
               }`}
             >
               {label}
@@ -531,12 +538,12 @@ const ComplaintsPage = () => {
               const authorInfo = c.author && typeof c.author === 'object' ? c.author : null;
 
               return (
-                <div key={c._id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                <div key={c._id} className={`complaint-card ${CARD_ACCENT_STYLES[c.status] || ''} border rounded-xl p-5`}>
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       {/* Badges row */}
                       <div className="flex items-center gap-2 flex-wrap mb-2">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${STATUS_STYLES[c.status]}`}>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${STATUS_STYLES[c.status]}`}>
                           {c.status}
                         </span>
                         {c.isEdited && (
@@ -705,7 +712,7 @@ const ComplaintsPage = () => {
       {/* File Complaint Modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4" onClick={closeForm}>
-          <div className="w-full max-w-lg bg-white border border-gray-200 rounded-xl shadow-xl p-6 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="complaint-modal w-full max-w-lg border border-gray-200 rounded-xl shadow-xl p-6 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5 border-b border-gray-100 pb-3">
               <h2 className="text-lg font-bold text-gray-900">File a Complaint</h2>
               <button onClick={closeForm} className="text-gray-400 hover:text-gray-900"><X className="w-5 h-5" /></button>
