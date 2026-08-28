@@ -10,11 +10,13 @@ import PostCard        from './PostCard';
 import CreatePostForm  from './CreatePostForm';
 import api             from '../utils/api';
 import { useAuth }     from '../context/AuthContext';
+import { useSocket }   from '../context/SocketContext';
 
 const HASHTAG_FILTERS = ['all', '#foodsplit', '#cabsplit', '#resell', '#lost', '#found'];
 
 const PostFeed = () => {
   const { user }                 = useAuth();
+  const { socket }               = useSocket();
   const [posts,        setPosts]        = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [loadingMore,  setLoadingMore]  = useState(false);
@@ -43,6 +45,17 @@ const PostFeed = () => {
   }, [activeFilter]);
 
   useEffect(() => { fetchPosts(1, activeFilter, true); }, [fetchPosts]);
+
+  // ── Live removal when a #resell item is marked sold ───────────────────────
+  // The seller's own card is removed by onPostDeleted below. This covers every
+  // OTHER viewer: without it a sold listing sits in their feed until the next
+  // refresh, and clicking it opens a chat room that has already been closed.
+  useEffect(() => {
+    if (!socket) return;
+    const handleSold = ({ postId }) => setPosts(prev => prev.filter(p => p._id !== postId));
+    socket.on('postSold', handleSold);
+    return () => socket.off('postSold', handleSold);
+  }, [socket]);
 
   const handleFilterChange = filter => { setActiveFilter(filter); setPage(1); };
 

@@ -352,6 +352,113 @@ exports.createPost = async (req, res) => {
   }
 };
 
+// ── PATCH /api/posts/:id/sold ────────────────────────────────────────────────
+/**
+ * Marks a #resell listing as sold. One action, three effects:
+ *   1. every chat room attached to the post is closed
+ *   2. the post is removed from the feed
+ *   3. everyone who was chatting about it is told why it vanished
+ *
+ * Only the author (or an Admin) can do this, and only for #resell — the other
+ * chat hashtags have no notion of a sale. #foodsplit and #cabsplit already end
+ * themselves through the expiry cron.
+ *
+ * The post is SOFT-deleted (isActive = false), matching deletePost and the
+ * expiry cron. Hard-deleting would orphan the room's message history, and the
+ * seller may still need that record of who agreed to what.
+ *
+ * Ordering matters: the room is closed before the post is deactivated. If the
+ * process dies between the two, a closed room on a live post is recoverable
+ * (the author simply retries); a live room pointing at a deleted post is not,
+ * because joinRoom rejects on a missing post and nobody could reopen it.
+ */
+exports.markPostSold = async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post || !post.isActive) {
+      return res.status(404).json({ success: false, message: 'Post not found.' });
+    }
+
+    const isAuthor = post.author.toString() === req.user._id.toString();
+    if (!isAuthor && req.user.role !== 'Admin') {
+      return res.status(403).json({ success: false, message: 'Only the seller can mark this item as sold.' });
+    }
+
+    if (post.hashtag !== '#resell') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only #resell posts can be marked as sold.',
+      });
+    }
+
+    // ── 1. Close every room attached to this post ────────────────────────────
+    // updateMany, not findOne: findOrCreate has raced in the past and a post can
+    // end up with more than one room. Closing only the first would leave a live
+    // room behind that nobody can reach.
+    const rooms = await ChatRoom.find({ postId: post._id }).select('_id participants isActive').lean();
+    await ChatRoom.updateMany({ postId: post._id, isActive: true }, { $set: { isActive: false } });
+
+    // ── 2. Remove the listing from the feed ──────────────────────────────────
+    post.isActive = false;
+    await post.save();
+
+    // ── 3. Tell the room, then tell the participants ─────────────────────────
+    const io = global._io;
+    if (io) {
+      // Legacy post-linked socket rooms are keyed by postId; Chat Hub rooms are
+      // keyed by roomId. Both are emitted because both clients may be open.
+      io.to(post._id.toString()).emit('roomClosed', {
+        postId:   post._id.toString(),
+        closedBy: req.user.displayName,
+        message:  `${req.user.displayName} marked this item as sold. The room is now closed.`,
+      });
+
+      rooms.forEach((room) => {
+        io.to(room._id.toString()).emit('globalRoomClosed', {
+          roomId:   room._id.toString(),
+          closedBy: req.user.displayName,
+        });
+      });
+
+      // Feeds drop the card without a refetch; room lists re-fetch.
+      io.emit('postSold', { postId: post._id.toString(), title: post.title });
+      io.emit('roomsUpdated');
+    }
+
+    // Everyone who was in the room gets told, minus the seller. Without this a
+    // buyer's chat simply disappears from their list with no explanation.
+    const participantIds = [
+      ...new Set(
+        rooms
+          .flatMap((room) => room.participants || [])
+          .map((id) => id.toString())
+          .filter((id) => id !== post.author.toString()),
+      ),
+    ];
+
+    if (participantIds.length) {
+      await emitNotifications(
+        participantIds.map((id) => ({
+          recipient: id,
+          sender:    req.user._id,
+          type:      'sold',
+          post:      post._id,
+          message:   `"${post.title}" has been sold. The chat room is now closed.`,
+        })),
+      ).catch((err) => console.error('[postController] sold notification failed:', err.message));
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Marked as sold. The listing has been removed and the chat room closed.',
+      data: { postId: post._id, roomsClosed: rooms.length, notified: participantIds.length },
+    });
+  } catch (err) {
+    console.error('[postController.markPostSold]', err);
+    return res.status(500).json({ success: false, message: 'Failed to mark this item as sold.' });
+  }
+};
+
 // ── GET /api/moderation/flagged  (Admin) ─────────────────────────────────────
 /**
  * The review queue. Flagging without a queue is theatre — nobody ever sees the

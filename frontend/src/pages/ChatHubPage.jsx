@@ -419,6 +419,7 @@ const ChatHubPage = () => {
   const [sending, setSending] = useState(false);
   const [closingRoom, setClosingRoom] = useState(false);
   const [roomClosed, setRoomClosed] = useState(false);
+  const [markingSold, setMarkingSold] = useState(false);
 
   // Online users in active global room
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -624,13 +625,12 @@ const ChatHubPage = () => {
 
   // ── Select a room ────────────────────────────────────────────────────────────
   const handleSelectRoom = useCallback(async (room) => {
-    // Post-linked rooms redirect to the post on the feed
-    if (room._roomType === 'post') {
-      const postId = room.postId?._id || room.postId;
-      navigate(`/feed?post=${postId}`);
-      return;
-    }
-
+    // Post-linked rooms (#resell / #foodsplit / #cabsplit) open here like any
+    // other room. This used to redirect to the post on the feed instead, which
+    // — together with the socket handlers rejecting non-global rooms — meant
+    // clicking a post chat bounced you out of the hub and there was no way to
+    // reach the conversation at all.
+    //
     // Approval-gated room we are not a member of: never open it. The backend
     // enforces this too — this just avoids a guaranteed 403 round-trip.
     if (room.requiresApproval && room.canEnter === false) {
@@ -737,6 +737,35 @@ const ChatHubPage = () => {
     }
   };
 
+  // ── Mark as Sold (#resell post-linked rooms, seller only) ────────────────────
+  // Same action as the button on the post card: closes this room and removes
+  // the listing. Offered here too because once a deal is agreed, the chat is
+  // where the seller already is — making them navigate back to the feed to end
+  // it is the kind of step people skip, leaving dead listings in the feed.
+  const handleMarkSold = async () => {
+    if (!activeRoom || markingSold) return;
+    const postId = activeRoom.postId?._id || activeRoom.postId;
+    if (!postId) return;
+
+    if (!window.confirm(
+      'Mark this item as sold?\n\n' +
+      '• This chat room will be closed\n' +
+      '• The listing will be removed from the feed\n\n' +
+      'This cannot be undone.'
+    )) return;
+
+    setMarkingSold(true);
+    try {
+      await api.patch(`/posts/${postId}/sold`);
+      // The server broadcasts globalRoomClosed, which flips the UI to read-only
+      // for everyone in the room including us — no local state change needed.
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to mark this item as sold.');
+    } finally {
+      setMarkingSold(false);
+    }
+  };
+
   // ── Room creation callback ────────────────────────────────────────────────────
   const handleRoomCreated = (newRoom) => {
     const tagged = {
@@ -811,6 +840,15 @@ const ChatHubPage = () => {
   const isCreator = activeRoom?.createdBy?._id === user?._id ||
     activeRoom?.createdBy === user?._id;
   const canClose = isCreator || user?.role === 'Admin';
+
+  // Sold is offered only on a post-linked #resell room, and only to the seller
+  // (or an Admin). createdBy on a post-linked room is the post's author, set
+  // when createPost auto-creates the room.
+  const canMarkSold =
+    canClose &&
+    activeRoom?.hashtag === '#resell' &&
+    Boolean(activeRoom?.postId) &&
+    !roomClosed;
 
   return (
     <div className="ch-shell">
@@ -1021,6 +1059,16 @@ const ChatHubPage = () => {
                     {activeRoom.pendingCount > 0 && (
                       <span className="ch-requests-btn-count">{activeRoom.pendingCount}</span>
                     )}
+                  </button>
+                )}
+                {canMarkSold && (
+                  <button
+                    className="ch-sold-room-btn"
+                    onClick={handleMarkSold}
+                    disabled={markingSold}
+                    title="Close this room and remove the listing"
+                  >
+                    {markingSold ? 'Marking…' : '✅ Mark as Sold'}
                   </button>
                 )}
                 {canClose && !roomClosed && (

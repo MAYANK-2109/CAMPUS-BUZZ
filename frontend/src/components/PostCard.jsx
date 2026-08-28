@@ -120,15 +120,25 @@ const PostCard = ({ post: initialPost, onPostDeleted, hideDelete = false }) => {
   };
 
   // ── Mark as Sold (#resell only) ─────────────────────────────────────────
+  // One action ends the sale: the chat room closes and the listing leaves the
+  // feed. The confirm text spells both out, because removing the post is not
+  // undoable from the UI and "sold" does not obviously imply "deleted".
   const handleMarkAsSold = async () => {
-    if (!window.confirm('Mark this item as sold? This will close the chat room.')) return;
+    if (!window.confirm(
+      'Mark this item as sold?\n\n' +
+      '• The chat room will be closed\n' +
+      '• This listing will be removed from the feed\n\n' +
+      'This cannot be undone.'
+    )) return;
+
     setMarkingSold(true);
     try {
-      await api.patch(`/chat-rooms/${post._id}/close`);
+      await api.patch(`/posts/${post._id}/sold`);
       setRoomClosed(true);
+      // Drop the card immediately rather than waiting for the next feed fetch.
+      onPostDeleted?.(post._id);
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to close room.');
-    } finally {
+      alert(err.response?.data?.message || 'Failed to mark as sold.');
       setMarkingSold(false);
     }
   };

@@ -529,6 +529,22 @@
 .ch-close-room-btn:hover    { background: #fecaca; }
 .ch-close-room-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Mark-as-sold — same shape as the close button, green rather than red:
+   ending a sale is a completed action, not a destructive one. */
+.ch-sold-room-btn {
+  padding: 8px 14px;
+  background: #dcfce7;
+  color: #16a34a;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+.ch-sold-room-btn:hover    { background: #bbf7d0; }
+.ch-sold-room-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* ── Messages list */
 .ch-messages {
   flex: 1;

@@ -206,6 +206,20 @@ const initSocket = (httpServer) => {
     //  GLOBAL HUB ROOM EVENTS  (new)
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /**
+     * The Chat Hub is the only chat UI in the app, and it drives every room —
+     * standalone hub rooms AND the rooms auto-created for #resell / #foodsplit /
+     * #cabsplit posts — through the *GlobalRoom handlers below.
+     *
+     * Those handlers used to reject any room with isGlobal === false. Every
+     * post-linked room is created with isGlobal: false (see postController's
+     * createPost), so joining one always answered "Room not found" and post chat
+     * was unusable end to end.
+     *
+     * isGlobal still means what it says — standalone room vs. attached to a post —
+     * and the room list uses it to group them. It is simply not an access check:
+     * whether a room can be entered is decided by isActive and canAccess().
+     */
     // ── joinGlobalRoom ────────────────────────────────────────────────────────
     socket.on('joinGlobalRoom', async ({ roomId }) => {
       try {
@@ -214,8 +228,8 @@ const initSocket = (httpServer) => {
         const room = await ChatRoom.findById(roomId)
           .populate('createdBy', 'displayName avatarUrl role');
 
-        if (!room || !room.isGlobal) return socket.emit('roomError', { message: 'Room not found.' });
-        if (!room.isActive)          return socket.emit('roomError', { message: 'This room is closed.' });
+        if (!room)          return socket.emit('roomError', { message: 'Room not found.' });
+        if (!room.isActive) return socket.emit('roomError', { message: 'This room is closed.' });
 
         // ── Approval gate ─────────────────────────────────────────────────────
         // Enforced here as well as on the REST route: the socket is a separate
@@ -292,7 +306,7 @@ const initSocket = (httpServer) => {
         if (text.trim().length > 1000) return socket.emit('roomError', { message: 'Message too long (max 1000 characters).' });
 
         const room = await ChatRoom.findById(roomId);
-        if (!room || !room.isGlobal || !room.isActive) {
+        if (!room || !room.isActive) {
           return socket.emit('roomError', { message: 'Room is closed or not found.' });
         }
 
@@ -377,8 +391,8 @@ const initSocket = (httpServer) => {
         if (!roomId) return socket.emit('roomError', { message: 'roomId is required.' });
 
         const room = await ChatRoom.findById(roomId);
-        if (!room || !room.isGlobal) return socket.emit('roomError', { message: 'Room not found.' });
-        if (!room.isActive)          return socket.emit('roomError', { message: 'Room is already closed.' });
+        if (!room)          return socket.emit('roomError', { message: 'Room not found.' });
+        if (!room.isActive) return socket.emit('roomError', { message: 'Room is already closed.' });
 
         const isCreator = room.createdBy?.toString() === socket.user._id.toString();
         if (!isCreator && socket.user.role !== 'Admin') {

@@ -100,6 +100,9 @@ router.get('/posts/:id',  protect, postController.getPostById);
 router.patch('/posts/:id',  protect, moderatePost, postController.updatePost);
 router.delete('/posts/:id', protect, postController.deletePost);
 
+// Mark a #resell listing sold: closes its chat room(s) and removes the post.
+router.patch('/posts/:id/sold', protect, postController.markPostSold);
+
 // ── Moderation review queue (Admin only) ─────────────────────────────────────
 router.get('/moderation/flagged', protect, adminOnly, postController.getFlaggedPosts);
 router.patch('/moderation/:id',   protect, adminOnly, postController.reviewFlaggedPost);
