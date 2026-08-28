@@ -1,58 +1,57 @@
 <div align="center">
 
-<img src="./frontend/public/logo.png" alt="Campus Buzz Logo" width="250" />
+<img src="./frontend/public/logo.png" alt="Campus Buzz Logo" width="220" />
 
-<br/>
+<h1>CAMPUS BUZZ</h1>
 
-```
- ██████╗  █████╗ ███╗   ███╗██████╗ ██╗   ██╗███████╗    ██████╗ ██╗   ██╗███████╗███████╗
-██╔════╝ ██╔══██╗████╗ ████║██╔══██╗██║   ██║██╔════╝    ██╔══██╗██║   ██║╚══███╔╝╚══███╔╝
-██║      ███████║██╔████╔██║██████╔╝██║   ██║███████╗    ██████╔╝██║   ██║  ███╔╝   ███╔╝ 
-██║      ██╔══██║██║╚██╔╝██║██╔═══╝ ██║   ██║╚════██║    ██╔══██╗██║   ██║ ███╔╝   ███╔╝  
-╚██████╗ ██║  ██║██║ ╚═╝ ██║██║     ╚██████╔╝███████║    ██████╔╝╚██████╔╝███████╗███████╗
- ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝      ╚═════╝ ╚══════╝    ╚═════╝  ╚═════╝ ╚══════╝╚══════╝
-```
+<h3>🎓 The all-in-one campus coordination platform for NITRR</h3>
 
-### 🎓 The All-in-One Campus Coordination Platform for NITRR
+<p><em>One platform. Every beat of campus life.</em></p>
 
-<br/>
+<br />
 
 <a href="https://drive.google.com/drive/folders/12sLIhtUqlvR8WThyVVnPdKA7BpHnj9MX?usp=drive_link">
-  <img src="https://img.shields.io/badge/▶_Watch_Video_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch Video Demo" height="40" />
+  <img src="https://img.shields.io/badge/Watch_Video_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch Video Demo" height="36" />
 </a>
-&nbsp;&nbsp;
+&nbsp;
 <a href="https://campus-buzz-iota.vercel.app/">
-  <img src="https://img.shields.io/badge/🌍_Live_Website-0055FF?style=for-the-badge" alt="Live Website" height="40" />
+  <img src="https://img.shields.io/badge/Visit_Live_Website-0055FF?style=for-the-badge&logo=vercel&logoColor=white" alt="Live Website" height="36" />
 </a>
 
-<br/><br/>
+<br /><br />
 
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
-[![React](https://img.shields.io/badge/React-18.3-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
-[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?style=for-the-badge&logo=mongodb&logoColor=white)](https://www.mongodb.com/atlas)
-[![Socket.io](https://img.shields.io/badge/Socket.io-4.8-010101?style=for-the-badge&logo=socket.io&logoColor=white)](https://socket.io)
-[![Express](https://img.shields.io/badge/Express-4.21-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com)
-[![TailwindCSS](https://img.shields.io/badge/Tailwind-3.4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
+[![React](https://img.shields.io/badge/React-18.3-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?style=flat-square&logo=mongodb&logoColor=white)](https://www.mongodb.com/atlas)
+[![Socket.io](https://img.shields.io/badge/Socket.io-4.8-010101?style=flat-square&logo=socket.io&logoColor=white)](https://socket.io)
+[![Express](https://img.shields.io/badge/Express-4.21-000000?style=flat-square&logo=express&logoColor=white)](https://expressjs.com)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 
-<br/>
+<br />
 
-[🗺️ Data Flow Architecture](./DATA_FLOW.md) · [📡 API Reference](./docs/API.md)
+**[🌐 Live App](https://campus-buzz-iota.vercel.app/)** · **[🎬 Video Demo](https://drive.google.com/drive/folders/12sLIhtUqlvR8WThyVVnPdKA7BpHnj9MX?usp=drive_link)** · **[🗺️ Data Flow](./DATA_FLOW.md)** · **[📡 API Reference](./docs/API.md)**
 
-<br/>
+<br />
 
 </div>
 
 ---
 
 ## 👥 Team UNKNOWNS (Contributors)
-- Mayank Kumar Sahu
-- Nandish Agarwal
-- Nikhil Kumar Singh
-- Mayank Kumar Chandrikapure (L)
+
+| Contributor | Role |
+|:------------|:-----|
+| Mayank Kumar Sahu | Team member |
+| Nandish Agarwal | Team member |
+| Nikhil Kumar Singh | Team member |
+| Mayank Kumar Chandrikapure | Team lead (L) |
 
 ---
 
-## 📋 Table of Contents
+<details>
+<summary><strong>📋 Table of Contents</strong></summary>
+
+<br />
 
 - [✨ What is Campus Buzz?](#-what-is-campus-buzz)
 - [🗺️ Data Flow Architecture](#️-data-flow-architecture)
@@ -67,6 +66,8 @@
 - [🗃️ Data Models](#️-data-models)
 - [⏰ Background Jobs](#-background-jobs)
 - [🚀 Deployment](#-deployment)
+
+</details>
 
 ---
 
