@@ -13,8 +13,7 @@ import {
   Route,
   Search,
   Users,
-  X,
-} from 'lucide-react';
+  X, CheckCircle2, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import api from '../utils/api';
 import ChatRoom from '../Chat/ChatRoom';
@@ -246,7 +245,7 @@ function PostRideModal({ onClose, onCreated }) {
   );
 }
 
-function RideCard({ ride, onJoin, joining }) {
+function RideCard({ ride, onJoin, joining, isOwner, onEnd, ending }) {
   const vehicle = VEHICLES[ride.ride?.vehicleType] || VEHICLES.cab;
   const VehicleIcon = vehicle.Icon;
   const totalSeats = ride.ride?.totalSeats || 4;
@@ -338,6 +337,36 @@ function RideCard({ ride, onJoin, joining }) {
         </div>
       </div>
 
+      {/* Creator controls. Close and cancel are visually distinct on purpose:
+          they look alike but one confirms a ride and the other calls it off,
+          and a rider is relying on which one gets pressed. */}
+      {isOwner && (
+        <div className="flex flex-wrap gap-2 border-t border-slate-100 px-5 py-3 sm:px-6">
+          <button
+            type="button"
+            disabled={Boolean(ending)}
+            onClick={() => onEnd(ride, 'close')}
+            title="Stop taking riders and send everyone the ride details"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2
+                       text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            {ending === 'close' ? 'Closing…' : 'Close ride'}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(ending)}
+            onClick={() => onEnd(ride, 'cancel')}
+            title="Call the ride off and tell everyone who joined"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50
+                       px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+          >
+            <XCircle className="h-3.5 w-3.5" />
+            {ending === 'cancel' ? 'Cancelling…' : 'Cancel ride'}
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/70 px-5 py-3 text-xs text-slate-500 sm:px-6">
         <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-slate-200 font-bold text-slate-600">
           {ride.author?.avatarUrl
@@ -360,6 +389,7 @@ export default function RideSplitPage() {
   const [posting, setPosting] = useState(false);
   const [joiningId, setJoiningId] = useState(null);
   const [chatRide, setChatRide] = useState(null);
+  const [endingId, setEndingId] = useState(null);   // `${rideId}:${action}` while in flight
 
   const suggestions = useMemo(() => {
     const needle = destination.trim().toLowerCase();
@@ -387,6 +417,41 @@ export default function RideSplitPage() {
     event?.preventDefault();
     setShowSuggestions(false);
     loadRides(destination);
+  };
+
+  /**
+   * Ends a ride the current user created.
+   *
+   * Both outcomes remove the listing, so the confirm text has to say which one
+   * the rider will receive — "close" and "cancel" are one word apart and mean
+   * opposite things to somebody waiting at the gate.
+   */
+  const endRide = async (ride, action) => {
+    if (endingId) return;
+
+    const where = ride.ride?.destination || 'this destination';
+    const prompt = action === 'cancel'
+      ? `Cancel the ride to ${where}?\n\n` +
+        '• Everyone who joined is told the ride is OFF\n' +
+        '• The listing and its chat are removed\n\nThis cannot be undone.'
+      : `Close the ride to ${where}?\n\n` +
+        '• Everyone who joined gets the full ride details\n' +
+        '• The listing stops taking new riders\n' +
+        '• The chat stays open so you can coordinate\n\nThis cannot be undone.';
+
+    if (!window.confirm(prompt)) return;
+
+    setEndingId(`${ride._id}:${action}`);
+    try {
+      const { data } = await api.patch(`/rides/${ride._id}/${action}`);
+      setRides((prev) => prev.filter((r) => r._id !== ride._id));
+      setChatRide((c) => (c?._id === ride._id && action === 'cancel' ? null : c));
+      alert(data.message);
+    } catch (err) {
+      alert(err.response?.data?.message || `Could not ${action} this ride.`);
+    } finally {
+      setEndingId(null);
+    }
   };
 
   const joinRide = async (ride) => {
@@ -488,7 +553,17 @@ export default function RideSplitPage() {
           <div className="flex min-h-[280px] items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-emerald-500" /></div>
         ) : rides.length > 0 ? (
           <div className="mt-5 grid gap-5 lg:grid-cols-2">
-            {rides.map((ride) => <RideCard key={ride._id} ride={ride} onJoin={joinRide} joining={joiningId === ride._id} />)}
+            {rides.map((ride) => (
+              <RideCard
+                key={ride._id}
+                ride={ride}
+                onJoin={joinRide}
+                joining={joiningId === ride._id}
+                isOwner={(ride.author?._id || ride.author) === user?._id}
+                onEnd={endRide}
+                ending={endingId?.startsWith(`${ride._id}:`) ? endingId.split(':')[1] : null}
+              />
+            ))}
           </div>
         ) : (
           <div className="mt-5 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">

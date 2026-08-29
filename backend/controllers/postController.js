@@ -566,6 +566,162 @@ exports.createPost = async (req, res) => {
   }
 };
 
+// ── PATCH /api/rides/:id/close  and  /api/rides/:id/cancel ───────────────────
+/**
+ * Ends a ride split. Two outcomes, and the difference is not cosmetic:
+ *
+ *   close   – the ride is going ahead and is no longer taking riders. Everyone
+ *             who joined is sent the full details they need to actually meet:
+ *             pickup, destination, time, vehicle, stops. The CHAT STAYS OPEN,
+ *             because a confirmed ride is exactly when riders need to
+ *             coordinate ("I'm at the gate", "running five minutes late").
+ *
+ *   cancel  – the ride is off. Riders are told plainly so they can arrange
+ *             something else, and the chat is closed with it since there is
+ *             nothing left to coordinate.
+ *
+ * Both remove the listing from discovery. Only the creator (or an Admin) can
+ * do either.
+ *
+ * @param {'close'|'cancel'} action Supplied by the route, not the client, so
+ *        the two outcomes cannot be confused by a malformed body.
+ */
+const endRide = (action) => async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post || !post.isActive) {
+      return res.status(404).json({ success: false, message: 'This ride is no longer available.' });
+    }
+
+    if (post.hashtag !== '#cabsplit' || !post.ride?.destination) {
+      return res.status(400).json({ success: false, message: 'This post is not a ride split.' });
+    }
+
+    const isAuthor = post.author.toString() === req.user._id.toString();
+    if (!isAuthor && req.user.role !== 'Admin') {
+      return res.status(403).json({
+        success: false,
+        message: `Only the person who created this ride can ${action} it.`,
+      });
+    }
+
+    // Riders who joined live in the room's participants — see joinRide, which
+    // adds them there rather than onto the post.
+    const rooms = await ChatRoom.find({ postId: post._id }).select('_id participants').lean();
+    const riderIds = [
+      ...new Set(
+        rooms
+          .flatMap((r) => r.participants || [])
+          .map(String)
+          .filter((id) => id !== post.author.toString()),
+      ),
+    ];
+
+    const message = action === 'cancel'
+      ? buildCancelMessage(post, req.user)
+      : buildCloseMessage(post);
+
+    // Remove the listing from discovery.
+    post.isActive = false;
+    await post.save();
+
+    // A cancelled ride has nothing left to coordinate; a confirmed one does.
+    if (action === 'cancel') {
+      await ChatRoom.updateMany({ postId: post._id, isActive: true }, { $set: { isActive: false } });
+    }
+
+    if (riderIds.length) {
+      await emitNotifications(
+        riderIds.map((id) => ({
+          recipient: id,
+          sender:    req.user._id,
+          type:      'ride',
+          post:      post._id,
+          message,
+        })),
+      ).catch((err) => console.error('[postController] ride notification failed:', err.message));
+    }
+
+    const io = global._io;
+    if (io) {
+      if (action === 'cancel') {
+        rooms.forEach((room) => {
+          io.to(room._id.toString()).emit('globalRoomClosed', {
+            roomId:   room._id.toString(),
+            closedBy: req.user.displayName,
+          });
+        });
+        io.emit('roomsUpdated');
+      }
+      // Drops the card from open feeds and the ride list without a refetch.
+      io.emit('postSold', { postId: post._id.toString(), title: post.title });
+      io.emit('rideEnded', { postId: post._id.toString(), action });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: action === 'cancel'
+        ? 'Ride cancelled. Everyone who joined has been told.'
+        : 'Ride closed. Everyone who joined has the details.',
+      data: { postId: post._id, notified: riderIds.length, action },
+    });
+  } catch (err) {
+    console.error(`[postController.endRide:${action}]`, err);
+    if (err.name === 'CastError') {
+      return res.status(400).json({ success: false, message: 'Invalid ride ID.' });
+    }
+    return res.status(500).json({ success: false, message: `Failed to ${action} this ride.` });
+  }
+};
+
+/** Departure rendered in IST — every rider is on campus, and a UTC timestamp
+ *  in a notification is a missed cab. */
+const formatDeparture = (when) => {
+  if (!when) return null;
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'short', day: 'numeric', month: 'short',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  }).format(new Date(when));
+};
+
+const VEHICLE_LABEL = { cab: 'Cab', auto: 'Auto', shared_cab: 'Shared cab' };
+
+/**
+ * The close message carries everything a rider needs to show up, because the
+ * post it came from is about to disappear from the feed. A notification saying
+ * only "your ride is confirmed" would send them hunting for details that no
+ * longer exist anywhere they can reach.
+ */
+function buildCloseMessage(post) {
+  const r = post.ride || {};
+  const parts = [
+    `Ride confirmed: ${r.from || 'NIT Raipur'} → ${r.destination}.`,
+  ];
+
+  const departure = formatDeparture(r.departureTime);
+  if (departure) parts.push(`Departs ${departure} IST.`);
+  if (r.vehicleType) parts.push(`${VEHICLE_LABEL[r.vehicleType] || r.vehicleType}.`);
+  if (r.routeStops?.length) parts.push(`Stops: ${r.routeStops.join(', ')}.`);
+  if (post.totalFare) parts.push(`Total fare ₹${post.totalFare}.`);
+
+  parts.push('The chat stays open — coordinate pickup there.');
+  return parts.join(' ');
+}
+
+function buildCancelMessage(post, actor) {
+  const r = post.ride || {};
+  const departure = formatDeparture(r.departureTime);
+  return (
+    `Ride cancelled: ${r.from || 'NIT Raipur'} → ${r.destination}` +
+    (departure ? ` (${departure} IST)` : '') +
+    `. ${actor.displayName} called it off, so please make other arrangements.`
+  );
+}
+
+exports.closeRide  = endRide('close');
+exports.cancelRide = endRide('cancel');
+
 // ── PATCH /api/posts/:id/sold ────────────────────────────────────────────────
 /**
  * Marks a #resell listing as sold. One action, three effects:

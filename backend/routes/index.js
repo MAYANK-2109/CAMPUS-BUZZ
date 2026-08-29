@@ -82,6 +82,10 @@ router.post('/posts',     protect, moderatePost, postController.createPost);
 // Dedicated Ride Split discovery and capacity-aware joining.
 router.get('/rides',          protect, postController.getRides);
 router.post('/rides/:id/join', protect, postController.joinRide);
+// Ending a ride has two outcomes and the action comes from the path, not the
+// body, so "close" and "cancel" can never be confused by a malformed request.
+router.patch('/rides/:id/close',  protect, postController.closeRide);
+router.patch('/rides/:id/cancel', protect, postController.cancelRide);
 // ── GET /api/posts/trending-hashtags ─────────────────────────────────────────
 router.get('/posts/trending-hashtags', protect, async (req, res) => {
   try {
