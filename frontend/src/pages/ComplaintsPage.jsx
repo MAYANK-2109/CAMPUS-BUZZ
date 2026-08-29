@@ -503,7 +503,7 @@ const ComplaintsPage = () => {
         ) : complaints.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="relative mb-6">
-              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center shadow-inner animate-pulse">
+              <div className="w-24 h-24 rounded-full bg-slate-100 flex items-center justify-center shadow-inner animate-pulse">
                 <span className="text-5xl select-none">🛡️</span>
               </div>
               <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md border border-gray-100">

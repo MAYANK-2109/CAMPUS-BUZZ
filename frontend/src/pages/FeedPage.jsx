@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Main feed page — combines Student Feed + Club/Admin Feed in one view.
  * A toggle button at the top-right of the sticky filter row switches between
- * modes with a slide + fade animation and a distinct purple-gradient theme.
+ * modes with a slide + fade animation and a distinct institutional theme.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -170,19 +170,19 @@ const FeedPage = () => {
     <div className="space-y-6">
       {[...Array(3)].map((_, i) => (
         <div key={i} className={`border rounded-2xl overflow-hidden shadow-sm animate-pulse ${
-          clubMode ? 'bg-purple-50/60 border-purple-100' : 'bg-white border-gray-100'
+          clubMode ? 'bg-slate-50/60 border-slate-200' : 'bg-white border-gray-100'
         }`}>
           <div className="flex items-center gap-3 p-4">
-            <div className={`w-10 h-10 rounded-full ${clubMode ? 'bg-purple-200' : 'bg-gray-200'}`} />
+            <div className={`w-10 h-10 rounded-full ${clubMode ? 'bg-slate-200' : 'bg-gray-200'}`} />
             <div className="flex-1 space-y-2">
-              <div className={`h-3 rounded w-28 ${clubMode ? 'bg-purple-200' : 'bg-gray-200'}`} />
-              <div className={`h-2 rounded w-20 ${clubMode ? 'bg-purple-100' : 'bg-gray-100'}`} />
+              <div className={`h-3 rounded w-28 ${clubMode ? 'bg-slate-200' : 'bg-gray-200'}`} />
+              <div className={`h-2 rounded w-20 ${clubMode ? 'bg-slate-100' : 'bg-gray-100'}`} />
             </div>
           </div>
-          <div className={`h-44 ${clubMode ? 'bg-purple-100' : 'bg-gray-100'}`} />
+          <div className={`h-44 ${clubMode ? 'bg-slate-100' : 'bg-gray-100'}`} />
           <div className="p-4 space-y-2">
-            <div className={`h-3 rounded w-full ${clubMode ? 'bg-purple-100' : 'bg-gray-200'}`} />
-            <div className={`h-3 rounded w-4/5  ${clubMode ? 'bg-purple-100' : 'bg-gray-100'}`} />
+            <div className={`h-3 rounded w-full ${clubMode ? 'bg-slate-100' : 'bg-gray-200'}`} />
+            <div className={`h-3 rounded w-4/5 ${clubMode ? 'bg-slate-100' : 'bg-gray-100'}`} />
           </div>
         </div>
       ))}
@@ -194,7 +194,7 @@ const FeedPage = () => {
       className="feed-surface min-h-screen pb-16 transition-colors duration-500"
       style={{
         background: clubMode
-          ? 'linear-gradient(155deg, #f5f3ff 0%, #faf5ff 45%, #ede9fe 100%)'
+          ? '#f0f2ef'
           : undefined,
       }}
     >
@@ -214,8 +214,8 @@ const FeedPage = () => {
       <div
         className="feed-toolbar sticky top-0 z-30 backdrop-blur-md border-b transition-all duration-500 px-4 py-2.5"
         style={{
-          background: clubMode ? 'rgba(237,233,254,0.95)' : undefined,
-          borderColor: clubMode ? '#c4b5fd' : undefined,
+          background: clubMode ? 'rgba(246,247,245,0.96)' : undefined,
+          borderColor: clubMode ? '#d2d7d2' : undefined,
         }}
       >
         <div className="max-w-xl mx-auto flex items-center gap-2">
@@ -232,7 +232,7 @@ const FeedPage = () => {
                 className={`flex-shrink-0 px-4 py-1.5 text-xs font-semibold rounded-full border transition-all ${
                   feed.filter === f
                     ? 'feed-filter-active text-white shadow-sm'
-                    : 'bg-white/80 border-gray-200/90 text-gray-600 hover:border-indigo-200 hover:bg-white'
+                    : 'bg-white/80 border-gray-200/90 text-gray-600 hover:border-slate-400 hover:bg-white'
                 }`}
               >
                 {f === 'all' ? '✦ All' : f}
@@ -243,10 +243,10 @@ const FeedPage = () => {
           {/* Club mode label — shown in place of filters */}
           {clubMode && (
             <div className="flex-1 flex items-center gap-2 min-w-0 banner-in">
-              <span className="text-[10px] uppercase tracking-widest font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-300 flex-shrink-0 whitespace-nowrap">
+              <span className="text-[10px] uppercase tracking-widest font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-300 flex-shrink-0 whitespace-nowrap">
                 Club &amp; Admin
               </span>
-              <span className="text-sm font-bold text-purple-900 truncate">Official Feed</span>
+              <span className="text-sm font-bold text-slate-900 truncate">Official Feed</span>
             </div>
           )}
 
@@ -259,8 +259,8 @@ const FeedPage = () => {
               flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full
               text-xs font-bold border-2 transition-all duration-300 select-none
               ${clubMode
-                ? 'bg-gradient-to-r from-purple-600 to-violet-600 text-white border-purple-500 shadow-lg shadow-purple-200/70 club-toggle-glow'
-                : 'bg-white text-purple-600 border-purple-200 hover:border-purple-400 hover:bg-purple-50 shadow-sm'
+                ? 'bg-slate-800 text-white border-slate-800 shadow-md club-toggle-glow'
+                : 'bg-white text-slate-700 border-slate-300 hover:border-slate-500 hover:bg-slate-50 shadow-sm'
               }
             `}
           >
@@ -268,7 +268,7 @@ const FeedPage = () => {
               ? <><Home     className="w-3.5 h-3.5" strokeWidth={2.5} /><span className="hidden sm:inline">Student</span></>
               : <><Megaphone className="w-3.5 h-3.5" strokeWidth={2} /><span className="hidden sm:inline">Clubs</span></>
             }
-            <span className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${clubMode ? 'bg-white/80' : 'bg-purple-400'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${clubMode ? 'bg-white/80' : 'bg-slate-400'}`} />
           </button>
         </div>
       </div>
@@ -276,14 +276,14 @@ const FeedPage = () => {
       {/* ── Club mode banner ──────────────────────────────────────────── */}
       {clubMode && (
         <div className="max-w-xl mx-auto px-4 pt-5 pb-0 banner-in">
-          <div className="flex items-center justify-between bg-gradient-to-r from-purple-700 to-violet-600 rounded-2xl px-5 py-4 shadow-lg shadow-purple-300/40">
+          <div className="flex items-center justify-between bg-slate-800 rounded-2xl px-5 py-4 shadow-md">
             <div>
               <div className="flex items-center gap-1.5 mb-1">
-                <Sparkles className="w-3.5 h-3.5 text-purple-200" strokeWidth={1.8} />
-                <span className="text-[9px] uppercase tracking-widest font-bold text-purple-200">Official Channel</span>
+                <Sparkles className="w-3.5 h-3.5 text-slate-300" strokeWidth={1.8} />
+                <span className="text-[9px] uppercase tracking-widest font-bold text-slate-300">Official Channel</span>
               </div>
               <h2 className="text-white font-extrabold text-lg leading-tight">Club Feed</h2>
-              <p className="text-purple-200 text-xs mt-0.5">Announcements &amp; events from clubs &amp; admin</p>
+              <p className="text-slate-300 text-xs mt-0.5">Announcements &amp; events from clubs &amp; admin</p>
             </div>
             {isCreator && (
               <button
@@ -295,7 +295,7 @@ const FeedPage = () => {
             )}
           </div>
           {isCreator && (
-            <div className="mt-3 bg-purple-50 border border-purple-200 rounded-xl px-4 py-2.5 text-xs text-purple-800">
+            <div className="mt-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-700">
               <span className="font-bold">Pro-tip:</span> Embed Google Forms or other content by pasting an iframe URL in the description.
             </div>
           )}
@@ -317,17 +317,17 @@ const FeedPage = () => {
         ) : feed.posts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 ${
-              clubMode ? 'bg-gradient-to-br from-purple-100 to-violet-200' : 'bg-gray-100'
+              clubMode ? 'bg-slate-100' : 'bg-gray-100'
             }`}>
               {clubMode
                 ? <span className="text-4xl select-none animate-bounce">📢</span>
                 : <PenSquare className="w-9 h-9 text-gray-400" strokeWidth={1.5} />
               }
             </div>
-            <h2 className={`font-bold text-xl mb-2 ${clubMode ? 'text-purple-900' : 'text-gray-900'}`}>
+            <h2 className={`font-bold text-xl mb-2 ${clubMode ? 'text-slate-900' : 'text-gray-900'}`}>
               {clubMode ? 'No announcements yet' : 'Nothing here yet'}
             </h2>
-            <p className={`text-sm mb-6 max-w-xs leading-relaxed ${clubMode ? 'text-purple-600' : 'text-gray-500'}`}>
+            <p className={`text-sm mb-6 max-w-xs leading-relaxed ${clubMode ? 'text-slate-600' : 'text-gray-500'}`}>
               {clubMode
                 ? (isCreator
                     ? 'Be the first to post an official announcement or event update.'
@@ -342,7 +342,7 @@ const FeedPage = () => {
                 onClick={() => setShowForm(true)}
                 className={`flex items-center gap-2 px-6 py-2.5 text-white text-sm font-bold rounded-full transition-all shadow-md hover:shadow-lg active:scale-95 ${
                   clubMode
-                    ? 'bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700'
+                    ? 'bg-slate-800 hover:bg-slate-700'
                     : 'bg-gray-900 hover:bg-gray-800'
                 }`}
               >
@@ -361,11 +361,11 @@ const FeedPage = () => {
             )}
             {focusedPost && (
               <div className="mb-4">
-                <div className="flex items-center justify-between gap-3 px-4 py-2 rounded-t-xl bg-teal-50 border border-b-0 border-teal-200 text-xs font-semibold text-teal-700">
+                <div className="flex items-center justify-between gap-3 px-4 py-2 rounded-t-xl bg-slate-50 border border-b-0 border-slate-300 text-xs font-semibold text-slate-700">
                   <span>Showing the post from your notification</span>
                   <button onClick={clearFocus} className="hover:underline">Back to feed</button>
                 </div>
-                <div className="ring-2 ring-teal-300 rounded-b-xl overflow-hidden">
+                <div className="ring-2 ring-slate-300 rounded-b-xl overflow-hidden">
                   <PostCard
                     post={focusedPost}
                     onPostDeleted={() => clearFocus()}
@@ -391,14 +391,14 @@ const FeedPage = () => {
                   disabled={feed.loadingMore}
                   className={`px-6 py-2 text-sm font-semibold border rounded-lg transition-colors shadow-sm disabled:opacity-50 ${
                     clubMode
-                      ? 'border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100'
+                      ? 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100'
                       : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
                   }`}
                 >
                   {feed.loadingMore ? (
                     <span className="flex items-center gap-2 justify-center">
                       <span className={`w-3.5 h-3.5 border-2 rounded-full animate-spin ${
-                        clubMode ? 'border-purple-200 border-t-purple-600' : 'border-gray-300 border-t-gray-600'
+                        clubMode ? 'border-slate-200 border-t-slate-600' : 'border-gray-300 border-t-gray-600'
                       }`} />
                       Loading…
                     </span>
@@ -415,7 +415,7 @@ const FeedPage = () => {
         onClick={() => setShowForm(true)}
         className={`fixed bottom-24 md:bottom-6 right-6 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-all duration-300 z-20 ${
           clubMode
-            ? 'bg-gradient-to-br from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 shadow-purple-300'
+            ? 'bg-slate-800 hover:bg-slate-700 shadow-slate-300'
             : 'feed-create-button'
         } text-white`}
         title={clubMode ? 'Create Club Post' : 'Create Post'}

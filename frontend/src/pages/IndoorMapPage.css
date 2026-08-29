@@ -1,16 +1,13 @@
 .imap-page {
-  --imap-ink: #172033;
-  --imap-muted: #687386;
+  --imap-ink: #20282d;
+  --imap-muted: #697278;
   --imap-line: rgba(148, 163, 184, 0.26);
-  --imap-indigo: #5558a9;
-  --imap-indigo-soft: rgba(85, 88, 169, 0.09);
+  --imap-indigo: #596a61;
+  --imap-indigo-soft: rgba(89, 106, 97, 0.09);
   min-height: 100vh;
   padding: 28px clamp(16px, 3vw, 42px) 48px;
   color: var(--imap-ink);
-  background:
-    radial-gradient(circle at 8% 0%, rgba(99, 102, 241, 0.045), transparent 31rem),
-    radial-gradient(circle at 95% 12%, rgba(14, 165, 233, 0.028), transparent 28rem),
-    #f7f8fa;
+  background: #f3f4f2;
 }
 
 .imap-header,
@@ -46,7 +43,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #4f518f;
+  color: #52645a;
   font-size: 11px;
   font-weight: 750;
   text-transform: uppercase;
@@ -56,7 +53,7 @@
 .imap-access {
   flex-shrink: 0;
   padding: 8px 11px;
-  border: 1px solid rgba(85, 88, 169, 0.16);
+  border: 1px solid rgba(89, 106, 97, 0.2);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
   color: #646b7a;
@@ -74,10 +71,10 @@
 
 .imap-panel,
 .imap-map-card {
-  border: 1px solid rgba(226, 232, 240, 0.94);
+  border: 1px solid #dedfdb;
   border-radius: 20px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.99), rgba(251, 251, 253, 0.97));
-  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.055);
+  background: #ffffff;
+  box-shadow: 0 8px 26px rgba(24, 31, 35, 0.06);
 }
 
 .imap-panel {

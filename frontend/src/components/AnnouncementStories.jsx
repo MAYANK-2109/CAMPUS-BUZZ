@@ -30,16 +30,16 @@ const DURATION_OPTIONS = [
   { label: '48 hours', value: 48 },
 ];
 
-// ── Ring gradient for unseen stories (like Instagram)
-const RING_GRADIENT = 'linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)';
+// ── Quiet ring for unseen stories
+const UNSEEN_RING = '#64736b';
 
 // ── Helpers
 const avatarInitial = (name) => (name || '?').charAt(0).toUpperCase();
 
 const roleBg = (role) => {
-  if (role === 'Club')  return '#7c3aed';
-  if (role === 'Admin') return '#dc2626';
-  return '#4f46e5';
+  if (role === 'Club')  return '#625f68';
+  if (role === 'Admin') return '#765f5f';
+  return '#566870';
 };
 
 // ── StoryRing: a single avatar circle in the strip
@@ -73,7 +73,7 @@ const StoryRing = ({ announcement, userId, onClick, isCreate = false, onCreateCl
       <div className="story-avatar-wrap">
         <div
           className="story-ring"
-          style={{ background: seen ? '#d1d5db' : RING_GRADIENT }}
+          style={{ background: seen ? '#d1d5db' : UNSEEN_RING }}
         >
           <div className="story-avatar-inner">
             {author?.avatarUrl

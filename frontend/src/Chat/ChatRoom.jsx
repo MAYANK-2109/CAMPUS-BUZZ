@@ -37,9 +37,9 @@ const HASHTAG_ACCENT = {
 };
 
 const HASHTAG_HEADER_BG = {
-  '#foodsplit': 'from-orange-950/80 to-gray-900',
-  '#cabsplit':  'from-blue-950/80 to-gray-900',
-  '#resell':    'from-purple-950/80 to-gray-900',
+  '#foodsplit': 'bg-stone-900',
+  '#cabsplit':  'bg-slate-900',
+  '#resell':    'bg-zinc-900',
 };
 
 const ChatRoom = ({ postId, postTitle, hashtag, isAuthor = false, onClose, onRoomClosed }) => {
@@ -160,7 +160,7 @@ const ChatRoom = ({ postId, postTitle, hashtag, isAuthor = false, onClose, onRoo
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   const accent     = HASHTAG_ACCENT[hashtag]    || 'text-violet-400 border-violet-500/40';
-  const headerBg   = HASHTAG_HEADER_BG[hashtag] || 'from-violet-950/80 to-gray-900';
+  const headerBg   = HASHTAG_HEADER_BG[hashtag] || 'bg-slate-900';
 
   return (
     /* Backdrop */
@@ -181,7 +181,7 @@ const ChatRoom = ({ postId, postTitle, hashtag, isAuthor = false, onClose, onRoo
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ──────────────────────────────────────────────────────── */}
-        <div className={`flex-shrink-0 bg-gradient-to-r ${headerBg}
+        <div className={`flex-shrink-0 ${headerBg}
                          border-b border-gray-700/60 px-4 py-3`}>
           <div className="flex items-center justify-between">
             <div className="min-w-0">

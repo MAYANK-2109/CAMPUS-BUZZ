@@ -100,7 +100,7 @@ const ClubFeedPage = () => {
         ) : posts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="relative mb-6">
-              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center shadow-inner">
+              <div className="w-24 h-24 rounded-full bg-slate-100 flex items-center justify-center shadow-inner">
                 <span className="text-5xl select-none animate-bounce">📢</span>
               </div>
             </div>
@@ -113,7 +113,7 @@ const ClubFeedPage = () => {
             {isCreator && (
               <button
                 onClick={() => setShowForm(true)}
-                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white text-sm font-semibold rounded-full transition-all shadow-md hover:shadow-lg active:scale-95"
+                className="flex items-center gap-2 px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-full transition-all shadow-md active:scale-95"
               >
                 <span className="text-base">+</span> Create First Announcement
               </button>

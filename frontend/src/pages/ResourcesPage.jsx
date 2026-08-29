@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Campus Resources hub — single destination for Chat, Calendar, Complaints
  * and Library. Gentle warm palette with clean, responsive cards and an
- * institutional NITRR footer.
+ * institutional NITRR footer and a restrained solid-colour system.
  */
 
 import React, { useState } from 'react';
@@ -22,13 +22,12 @@ const RESOURCES = [
     subtitle: 'Real-time student & group messaging',
     Icon: MessageSquare,
     to: '/chat',
-    iconBg: 'bg-blue-600 text-white',
-    cardBorder: 'hover:border-blue-300',
-    cardGlow: 'hover:shadow-blue-100/80',
-    accentBg: 'from-blue-50/80 to-indigo-50/40',
+    iconBg: 'bg-[#4c5d66] text-white',
+    cardBorder: 'hover:border-slate-300',
+    hoverBg: 'bg-slate-50/80',
     badge: 'Live',
-    badgeClass: 'bg-blue-100 text-blue-700 border-blue-200',
-    dotColor: 'bg-blue-500',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+    dotColor: 'bg-slate-500',
   },
   {
     id: 'calendar',
@@ -36,13 +35,12 @@ const RESOURCES = [
     subtitle: 'Academic schedules & club events',
     Icon: Calendar,
     to: '/calendar',
-    iconBg: 'bg-emerald-600 text-white',
-    cardBorder: 'hover:border-emerald-300',
-    cardGlow: 'hover:shadow-emerald-100/80',
-    accentBg: 'from-emerald-50/80 to-teal-50/40',
+    iconBg: 'bg-[#596b60] text-white',
+    cardBorder: 'hover:border-stone-300',
+    hoverBg: 'bg-stone-50/80',
     badge: 'Events',
-    badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    dotColor: 'bg-emerald-500',
+    badgeClass: 'bg-stone-100 text-stone-700 border-stone-200',
+    dotColor: 'bg-[#596b60]',
   },
   {
     id: 'complaints',
@@ -50,13 +48,12 @@ const RESOURCES = [
     subtitle: 'Lodge & track campus grievances',
     Icon: ShieldAlert,
     to: '/complaints',
-    iconBg: 'bg-amber-600 text-white',
-    cardBorder: 'hover:border-amber-300',
-    cardGlow: 'hover:shadow-amber-100/80',
-    accentBg: 'from-amber-50/80 to-orange-50/40',
+    iconBg: 'bg-[#786856] text-white',
+    cardBorder: 'hover:border-stone-300',
+    hoverBg: 'bg-[#f6f3ee]',
     badge: 'Portal',
-    badgeClass: 'bg-amber-100 text-amber-700 border-amber-200',
-    dotColor: 'bg-amber-500',
+    badgeClass: 'bg-[#f1ede7] text-stone-700 border-stone-200',
+    dotColor: 'bg-[#786856]',
   },
   {
     id: 'map',
@@ -64,13 +61,12 @@ const RESOURCES = [
     subtitle: 'Floor-wise rooms & shortest-path navigation',
     Icon: Map,
     to: '/map',
-    iconBg: 'bg-cyan-600 text-white',
-    cardBorder: 'hover:border-cyan-300',
-    cardGlow: 'hover:shadow-cyan-100/80',
-    accentBg: 'from-cyan-50/80 to-sky-50/40',
+    iconBg: 'bg-[#50646a] text-white',
+    cardBorder: 'hover:border-slate-300',
+    hoverBg: 'bg-[#f1f4f4]',
     badge: 'Navigate',
-    badgeClass: 'bg-cyan-100 text-cyan-700 border-cyan-200',
-    dotColor: 'bg-cyan-500',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+    dotColor: 'bg-[#50646a]',
   },
   {
     id: 'library',
@@ -78,13 +74,12 @@ const RESOURCES = [
     subtitle: 'Floor map & live seat reservation',
     Icon: BookOpen,
     to: '/library',
-    iconBg: 'bg-purple-600 text-white',
-    cardBorder: 'hover:border-purple-300',
-    cardGlow: 'hover:shadow-purple-100/80',
-    accentBg: 'from-purple-50/80 to-violet-50/40',
+    iconBg: 'bg-[#655f68] text-white',
+    cardBorder: 'hover:border-zinc-300',
+    hoverBg: 'bg-zinc-50/80',
     badge: 'Seats',
-    badgeClass: 'bg-purple-100 text-purple-700 border-purple-200',
-    dotColor: 'bg-purple-500',
+    badgeClass: 'bg-zinc-100 text-zinc-700 border-zinc-200',
+    dotColor: 'bg-[#655f68]',
   },
 ];
 
@@ -116,14 +111,9 @@ export default function ResourcesPage() {
     <div
       className="relative min-h-screen w-full flex flex-col transition-colors duration-300 overflow-x-hidden"
       style={{
-        background: 'linear-gradient(145deg, #fdfbf7 0%, #f9f5ed 45%, #f4ede2 100%)',
+        background: '#f4f3ef',
       }}
     >
-      {/* ── Subtle warm ambient shapes ───────────────────────────────────── */}
-      <div className="absolute top-0 right-0 w-96 h-96 bg-amber-200/25 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-      <div className="absolute bottom-1/3 left-0 w-80 h-80 bg-orange-100/30 rounded-full blur-3xl pointer-events-none -ml-20" />
-      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-rose-100/20 rounded-full blur-3xl pointer-events-none" />
-
       {/* ── Content wrapper ──────────────────────────────────────────────── */}
       <div className="relative z-10 flex flex-col min-h-screen max-w-2xl mx-auto w-full px-4 sm:px-6">
 
@@ -144,7 +134,7 @@ export default function ResourcesPage() {
             {/* Institute name + emblem */}
             <div className="flex items-center justify-between gap-3 mb-3">
               <div className="flex items-center gap-3.5">
-                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-600 to-orange-700 flex items-center justify-center flex-shrink-0 shadow-md text-white">
+                <div className="w-11 h-11 rounded-xl bg-[#786856] flex items-center justify-center flex-shrink-0 shadow-sm text-white">
                   <Award className="w-6 h-6" strokeWidth={2.2} />
                 </div>
                 <div>
@@ -228,20 +218,20 @@ export default function ResourcesPage() {
                   text-left
                   border border-stone-200/90 bg-white/90 backdrop-blur-sm
                   transition-all duration-200 ease-out
-                  shadow-sm hover:shadow-xl ${res.cardGlow} ${res.cardBorder}
-                  ${isHovered ? 'scale-[1.02] bg-white' : ''}
+                  shadow-sm hover:shadow-md ${res.cardBorder}
+                  ${isHovered ? 'scale-[1.01] bg-white' : ''}
                   ${isClicked ? 'scale-95' : ''}
                   min-h-[155px]
                   cursor-pointer select-none
                 `}
                 style={{
-                  transform: isClicked ? 'scale(0.96)' : isHovered ? 'scale(1.02)' : 'scale(1)',
+                  transform: isClicked ? 'scale(0.98)' : isHovered ? 'scale(1.01)' : 'scale(1)',
                 }}
               >
-                {/* Subtle hover gradient wash */}
+                {/* Quiet solid hover wash */}
                 <div
                   className={`
-                    absolute inset-0 bg-gradient-to-br ${res.accentBg} rounded-2xl
+                    absolute inset-0 ${res.hoverBg} rounded-2xl
                     opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none
                   `}
                 />
@@ -252,8 +242,8 @@ export default function ResourcesPage() {
                     className={`
                       w-11 h-11 rounded-xl ${res.iconBg}
                       flex items-center justify-center
-                      shadow-md shadow-stone-200/80 transition-transform duration-300
-                      ${isHovered ? 'scale-105 rotate-1' : ''}
+                      shadow-sm transition-transform duration-300
+                      ${isHovered ? 'scale-[1.03]' : ''}
                     `}
                   >
                     <res.Icon className="w-5 h-5" strokeWidth={2.2} />
