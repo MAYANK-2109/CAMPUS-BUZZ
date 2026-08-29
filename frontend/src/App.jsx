@@ -30,6 +30,7 @@ import NotificationsPage  from './pages/NotificationsPage';
 import ChatHubPage        from './pages/ChatHubPage';
 import ResourcesPage      from './pages/ResourcesPage';
 import LibraryPage        from './pages/LibraryPage';
+import FoodSplitPage  from './pages/FoodSplitPage';
 import RideSplitPage      from './pages/RideSplitPage';
 import IndoorMapPage      from './pages/IndoorMapPage';
 
@@ -152,6 +153,17 @@ const App = () => (
               <ProtectedRoute>
                 <AuthLayout fullBleed>
                   <RideSplitPage />
+                </AuthLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/food-split"
+            element={
+              <ProtectedRoute>
+                <AuthLayout fullBleed>
+                  <FoodSplitPage />
                 </AuthLayout>
               </ProtectedRoute>
             }

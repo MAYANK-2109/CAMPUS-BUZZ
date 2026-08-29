@@ -12,14 +12,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Home, LayoutGrid, Car, Map,
-  Bell, LogOut, User, ChevronUp,
-} from 'lucide-react';
+  Bell, LogOut, User, ChevronUp, UtensilsCrossed } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 
 const NAV_ITEMS = [
   { label: 'Feed',      to: '/feed',      Icon: Home },
   { label: 'Ride Split',to: '/rides',     Icon: Car },
+  { label: 'Food Split',to: '/food-split', Icon: UtensilsCrossed },
   { label: 'Resources', to: '/resources', Icon: LayoutGrid },
   { label: 'Indoor Map', to: '/map',       Icon: Map },
 ];

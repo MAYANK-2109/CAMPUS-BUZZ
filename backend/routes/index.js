@@ -86,6 +86,14 @@ router.post('/rides/:id/join', protect, postController.joinRide);
 // body, so "close" and "cancel" can never be confused by a malformed request.
 router.patch('/rides/:id/close',  protect, postController.closeRide);
 router.patch('/rides/:id/cancel', protect, postController.cancelRide);
+
+// ── Food Split ───────────────────────────────────────────────────────────────
+// Same shape as the ride routes above; both are served by one generalised
+// handler in the controller so the two split types cannot drift apart.
+router.get('/food-splits',              protect, postController.getFoodSplits);
+router.post('/food-splits/:id/join',    protect, postController.joinFoodSplit);
+router.patch('/food-splits/:id/close',  protect, postController.closeFoodSplit);
+router.patch('/food-splits/:id/cancel', protect, postController.cancelFoodSplit);
 // ── GET /api/posts/trending-hashtags ─────────────────────────────────────────
 router.get('/posts/trending-hashtags', protect, async (req, res) => {
   try {

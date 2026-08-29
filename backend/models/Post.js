@@ -53,6 +53,60 @@ const RideDetailsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * Food Split details. Mirrors RideDetailsSchema above: a #foodsplit post with
+ * this subdocument is a structured group order rather than a plain feed post,
+ * and gets its own discovery page, join flow and close/cancel actions.
+ */
+const FoodDetailsSchema = new mongoose.Schema(
+  {
+    restaurant: {
+      type:      String,
+      trim:      true,
+      maxlength: [120, 'Restaurant name cannot exceed 120 characters'],
+    },
+
+    /** Where the food is being brought to — hostel gate, block, room. */
+    dropLocation: {
+      type:      String,
+      trim:      true,
+      maxlength: [120, 'Drop location cannot exceed 120 characters'],
+      default:   'NIT Raipur',
+    },
+
+    /**
+     * When the order will be placed. This is the deadline that matters: after
+     * it, joining is pointless because the order is already in. Used the same
+     * way ride.departureTime is — as the post's natural expiry.
+     */
+    orderTime: {
+      type:    Date,
+      default: null,
+    },
+
+    /**
+     * Cap on people sharing the order, creator included. Ranges wider than a
+     * cab because a food order has no seats — the practical limit is how many
+     * people one delivery can serve.
+     */
+    maxPeople: {
+      type:    Number,
+      min:     [2,  'A food split needs at least 2 people'],
+      max:     [15, 'A food split cannot exceed 15 people'],
+      default: 4,
+    },
+
+    /** Free-text, e.g. "Domino's", "biryani", "north indian" — shown as a chip. */
+    cuisine: {
+      type:      String,
+      trim:      true,
+      maxlength: [60, 'Cuisine cannot exceed 60 characters'],
+      default:   '',
+    },
+  },
+  { _id: false }
+);
+
 const PostSchema = new mongoose.Schema(
   {
     title: {
@@ -153,6 +207,16 @@ const PostSchema = new mongoose.Schema(
     },
 
     /**
+     * food: present only on structured #foodsplit posts created through the
+     * Food Split page. A plain #foodsplit feed post leaves this null and keeps
+     * behaving exactly as before.
+     */
+    food: {
+      type:    FoodDetailsSchema,
+      default: null,
+    },
+
+    /**
      * Soft-delete flag. The cron job sets isActive = false instead of
      * removing documents, preserving chat history integrity.
      */
@@ -240,6 +304,9 @@ PostSchema.index({ hashtag: 1, 'ride.departureTime': 1, isActive: 1 });
 
 // ── Index for the Admin moderation queue (flagged posts, newest first) ───────
 PostSchema.index({ 'moderation.status': 1, createdAt: -1 });
+
+// ── Food Split discovery: upcoming orders, soonest first ────────────────────
+PostSchema.index({ hashtag: 1, isActive: 1, 'food.orderTime': 1 });
 
 // ── Multikey index backing the #lost/#found keyword match ───────────────────
 // Compound so the candidate scan is already narrowed to active posts of the

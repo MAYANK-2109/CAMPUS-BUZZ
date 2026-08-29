@@ -583,6 +583,22 @@
    label drops and the bot icon carries the meaning. Handled here rather than
    with an `xs:` Tailwind variant — this project has no xs breakpoint defined,
    so such a class would silently never match and hide the label everywhere. */
+/* Food Split form inputs — one class so the modal's eight fields stay
+   consistent without repeating a long utility string on each. */
+.fs-input {
+  margin-top: 0.35rem;
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 0.7rem 0.85rem;
+  font-size: 16px;            /* 16px stops iOS Safari zooming on focus */
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.fs-input:focus { border-color: #f59e0b; }
+
 .fb-launcher-label { display: none; }
 @media (min-width: 380px) {
   .fb-launcher-label { display: inline; }

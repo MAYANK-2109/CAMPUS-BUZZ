@@ -380,7 +380,7 @@ exports.joinRide = async (req, res) => {
 // ── POST /api/posts ───────────────────────────────────────────────────────────
 exports.createPost = async (req, res) => {
   try {
-    let { title, description, imageUrl, imagePublicId, hashtag, expiresAt, customTags, totalFare, ride } = req.body;
+    let { title, description, imageUrl, imagePublicId, hashtag, expiresAt, customTags, totalFare, ride, food } = req.body;
 
     /**
      * imagePublicId is only meaningful for images we actually hosted. The
@@ -399,6 +399,12 @@ exports.createPost = async (req, res) => {
     // Dedicated Ride Split posts use their departure as the post expiry.
     if (hashtag === '#cabsplit' && ride?.departureTime && !expiresAt) {
       expiresAt = ride.departureTime;
+    }
+
+    // Same for a structured Food Split: once the order is placed, joining is
+    // pointless, so the order time is the post's natural expiry.
+    if (hashtag === '#foodsplit' && food?.orderTime && !expiresAt) {
+      expiresAt = food.orderTime;
     }
 
     // expiresAt is required for time-sensitive hashtags
@@ -452,6 +458,46 @@ exports.createPost = async (req, res) => {
       };
     }
 
+    /**
+     * Structured Food Split. Only built when the client sends a `food` object —
+     * a plain #foodsplit feed post leaves post.food null and behaves exactly as
+     * it did before this feature existed.
+     */
+    let foodDetails = null;
+    if (hashtag === '#foodsplit' && food) {
+      const restaurant   = String(food.restaurant || '').trim();
+      const dropLocation = String(food.dropLocation || '').trim();
+      const orderTime    = new Date(food.orderTime);
+      const maxPeople    = Number(food.maxPeople);
+      const fare         = Number(totalFare);
+
+      if (!restaurant) {
+        return res.status(400).json({ success: false, message: 'Restaurant name is required for a food split.' });
+      }
+      if (!dropLocation) {
+        return res.status(400).json({ success: false, message: 'Drop location is required for a food split.' });
+      }
+      if (Number.isNaN(orderTime.getTime()) || orderTime <= new Date()) {
+        return res.status(400).json({ success: false, message: 'Order time must be in the future.' });
+      }
+      if (!Number.isInteger(maxPeople) || maxPeople < 2 || maxPeople > 15) {
+        return res.status(400).json({ success: false, message: 'Max people must be between 2 and 15.' });
+      }
+      // Fare is optional here, unlike a ride: people often agree the split
+      // after seeing the menu. Only reject a value that is present and absurd.
+      if (totalFare !== undefined && totalFare !== null && totalFare !== '' && (!Number.isFinite(fare) || fare < 0)) {
+        return res.status(400).json({ success: false, message: 'Total cost must be a positive amount.' });
+      }
+
+      foodDetails = {
+        restaurant,
+        dropLocation,
+        orderTime,
+        maxPeople,
+        cuisine: String(food.cuisine || '').trim().slice(0, 60),
+      };
+    }
+
     // ── Parse @mentions from description ─────────────────────────────────────
     const mentionHandles = [];
     if (description) {
@@ -478,8 +524,12 @@ exports.createPost = async (req, res) => {
       customTags: Array.isArray(customTags) ? customTags : [],
       expiresAt:  TIMED_HASHTAGS.has(hashtag) ? new Date(expiresAt) : null,
       mentions:   mentionIds,
-      totalFare:  hashtag === '#cabsplit' && totalFare != null ? Number(totalFare) : null,
+      // Cost is meaningful for both split types; a food order splits the bill
+      // the same way a cab splits the fare.
+      totalFare:  (hashtag === '#cabsplit' || hashtag === '#foodsplit') && totalFare != null && totalFare !== ''
+        ? Number(totalFare) : null,
       ride:       rideDetails,
+      food:       foodDetails,
       linkedEvent: req.body.linkedEvent || null,
       moderation: buildModerationDoc(req.moderation),
       // Only #lost / #found are matched, so only they need keywords stored.
@@ -496,7 +546,9 @@ exports.createPost = async (req, res) => {
         name:          post.title,
         hashtag:       post.hashtag,
         createdBy:     post.author,
-        participants:  rideDetails ? [post.author] : [],
+        // A structured split seats its creator immediately so the join count
+        // reads 1/N rather than 0/N before anyone else arrives.
+        participants:  (rideDetails || foodDetails) ? [post.author] : [],
         isActive:      true,
         lastMessageAt: new Date(),
       };
@@ -566,6 +618,132 @@ exports.createPost = async (req, res) => {
   }
 };
 
+// ── GET /api/food-splits ─────────────────────────────────────────────────────
+// Food Split discovery, mirroring getRides. The search needle matches either
+// the restaurant or the cuisine, so "biryani" finds a Paradise order even when
+// the poster never typed the word "biryani" in the restaurant field.
+exports.getFoodSplits = async (req, res) => {
+  try {
+    const query = (req.query.restaurant || req.query.q || '').trim().slice(0, 120);
+    const match = {
+      hashtag: '#foodsplit',
+      isActive: true,
+      'food.restaurant': { $exists: true, $ne: '' },
+      'food.orderTime': { $gt: new Date() },
+    };
+
+    if (query) {
+      const rx = new RegExp(escapeRegExp(query), 'i');
+      match.$or = [{ 'food.restaurant': rx }, { 'food.cuisine': rx }, { 'food.dropLocation': rx }];
+    }
+
+    const posts = await Post.find(match)
+      .sort({ 'food.orderTime': 1 })
+      .limit(50)
+      .populate('author', 'displayName role avatarUrl rollNo')
+      .lean();
+
+    const rooms = await ChatRoom.find({ postId: { $in: posts.map((p) => p._id) } })
+      .select('postId participants isActive')
+      .lean();
+    const roomByPost = new Map(rooms.map((r) => [r.postId.toString(), r]));
+    const userId = req.user._id.toString();
+    const needle = query.toLocaleLowerCase('en-IN');
+
+    const splits = posts.map((post) => {
+      const room = roomByPost.get(post._id.toString());
+      const participantIds = [...new Set((room?.participants || []).map((id) => id.toString()))];
+      const peopleJoined = participantIds.length || 1;
+      const maxPeople = post.food?.maxPeople || 4;
+      const restaurantMatch =
+        needle && String(post.food.restaurant).toLocaleLowerCase('en-IN').includes(needle);
+
+      return {
+        ...post,
+        peopleJoined,
+        isJoined: participantIds.includes(userId) || post.author?._id?.toString() === userId,
+        isFull: peopleJoined >= maxPeople || room?.isActive === false,
+        matchType: !needle ? 'upcoming' : (restaurantMatch ? 'restaurant' : 'cuisine'),
+      };
+    });
+
+    return res.json({ success: true, data: splits });
+  } catch (err) {
+    console.error('[postController.getFoodSplits]', err);
+    return res.status(500).json({ success: false, message: 'Failed to find food splits.' });
+  }
+};
+
+// ── POST /api/food-splits/:id/join ───────────────────────────────────────────
+// Capacity is checked inside the same atomic update that adds the participant,
+// so two people cannot claim the last place at once — same guard as joinRide.
+exports.joinFoodSplit = async (req, res) => {
+  try {
+    const post = await Post.findOne({
+      _id: req.params.id,
+      hashtag: '#foodsplit',
+      isActive: true,
+      'food.restaurant': { $exists: true },
+      'food.orderTime': { $gt: new Date() },
+    }).select('author food.maxPeople title');
+
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'This food split is no longer open.' });
+    }
+
+    let room = await ChatRoom.findOne({ postId: post._id });
+    if (!room) {
+      room = await ChatRoom.create({
+        postId: post._id,
+        isGlobal: false,
+        name: post.title,
+        hashtag: '#foodsplit',
+        createdBy: post.author,
+        participants: [post.author],
+        isActive: true,
+      });
+    }
+
+    const userId = req.user._id;
+    const alreadyJoined = room.participants.some((id) => id.toString() === userId.toString());
+    if (alreadyJoined || post.author.toString() === userId.toString()) {
+      return res.json({
+        success: true,
+        alreadyJoined: true,
+        peopleJoined: Math.max(1, new Set(room.participants.map(String)).size),
+      });
+    }
+
+    const maxPeople = post.food.maxPeople || 4;
+    const updatedRoom = await ChatRoom.findOneAndUpdate(
+      {
+        _id: room._id,
+        isActive: true,
+        participants: { $ne: userId },
+        $expr: { $lt: [{ $size: { $ifNull: ['$participants', []] } }, maxPeople] },
+      },
+      { $addToSet: { participants: userId } },
+      { new: true },
+    );
+
+    if (!updatedRoom) {
+      return res.status(409).json({ success: false, message: 'This food split is already full.' });
+    }
+
+    return res.json({
+      success: true,
+      peopleJoined: new Set(updatedRoom.participants.map(String)).size,
+      message: 'You are in. Coordinate your order in the chat.',
+    });
+  } catch (err) {
+    console.error('[postController.joinFoodSplit]', err);
+    if (err.name === 'CastError') {
+      return res.status(400).json({ success: false, message: 'Invalid food split ID.' });
+    }
+    return res.status(500).json({ success: false, message: 'Failed to join this food split.' });
+  }
+};
+
 // ── PATCH /api/rides/:id/close  and  /api/rides/:id/cancel ───────────────────
 /**
  * Ends a ride split. Two outcomes, and the difference is not cosmetic:
@@ -586,22 +764,40 @@ exports.createPost = async (req, res) => {
  * @param {'close'|'cancel'} action Supplied by the route, not the client, so
  *        the two outcomes cannot be confused by a malformed body.
  */
-const endRide = (action) => async (req, res) => {
+const SPLIT_KINDS = {
+  ride: {
+    noun:    'ride',
+    hashtag: '#cabsplit',
+    hasDetails: (post) => Boolean(post.ride?.destination),
+    close:   (post) => buildRideCloseMessage(post),
+    cancel:  (post, actor) => buildRideCancelMessage(post, actor),
+  },
+  food: {
+    noun:    'food split',
+    hashtag: '#foodsplit',
+    hasDetails: (post) => Boolean(post.food?.restaurant),
+    close:   (post) => buildFoodCloseMessage(post),
+    cancel:  (post, actor) => buildFoodCancelMessage(post, actor),
+  },
+};
+
+const endSplit = (kindKey, action) => async (req, res) => {
+  const kind = SPLIT_KINDS[kindKey];
   try {
     const post = await Post.findById(req.params.id);
     if (!post || !post.isActive) {
-      return res.status(404).json({ success: false, message: 'This ride is no longer available.' });
+      return res.status(404).json({ success: false, message: `This ${kind.noun} is no longer available.` });
     }
 
-    if (post.hashtag !== '#cabsplit' || !post.ride?.destination) {
-      return res.status(400).json({ success: false, message: 'This post is not a ride split.' });
+    if (post.hashtag !== kind.hashtag || !kind.hasDetails(post)) {
+      return res.status(400).json({ success: false, message: `This post is not a ${kind.noun}.` });
     }
 
     const isAuthor = post.author.toString() === req.user._id.toString();
     if (!isAuthor && req.user.role !== 'Admin') {
       return res.status(403).json({
         success: false,
-        message: `Only the person who created this ride can ${action} it.`,
+        message: `Only the person who created this ${kind.noun} can ${action} it.`,
       });
     }
 
@@ -618,8 +814,8 @@ const endRide = (action) => async (req, res) => {
     ];
 
     const message = action === 'cancel'
-      ? buildCancelMessage(post, req.user)
-      : buildCloseMessage(post);
+      ? kind.cancel(post, req.user)
+      : kind.close(post);
 
     // Remove the listing from discovery.
     post.isActive = false;
@@ -655,22 +851,22 @@ const endRide = (action) => async (req, res) => {
       }
       // Drops the card from open feeds and the ride list without a refetch.
       io.emit('postSold', { postId: post._id.toString(), title: post.title });
-      io.emit('rideEnded', { postId: post._id.toString(), action });
+      io.emit('splitEnded', { postId: post._id.toString(), kind: kindKey, action });
     }
 
     return res.status(200).json({
       success: true,
       message: action === 'cancel'
-        ? 'Ride cancelled. Everyone who joined has been told.'
-        : 'Ride closed. Everyone who joined has the details.',
+        ? `${kind.noun === 'ride' ? 'Ride' : 'Food split'} cancelled. Everyone who joined has been told.`
+        : `${kind.noun === 'ride' ? 'Ride' : 'Food split'} closed. Everyone who joined has the details.`,
       data: { postId: post._id, notified: riderIds.length, action },
     });
   } catch (err) {
-    console.error(`[postController.endRide:${action}]`, err);
+    console.error(`[postController.endSplit:${kindKey}:${action}]`, err);
     if (err.name === 'CastError') {
-      return res.status(400).json({ success: false, message: 'Invalid ride ID.' });
+      return res.status(400).json({ success: false, message: 'Invalid ID.' });
     }
-    return res.status(500).json({ success: false, message: `Failed to ${action} this ride.` });
+    return res.status(500).json({ success: false, message: `Failed to ${action} this ${kind.noun}.` });
   }
 };
 
@@ -693,7 +889,7 @@ const VEHICLE_LABEL = { cab: 'Cab', auto: 'Auto', shared_cab: 'Shared cab' };
  * only "your ride is confirmed" would send them hunting for details that no
  * longer exist anywhere they can reach.
  */
-function buildCloseMessage(post) {
+function buildRideCloseMessage(post) {
   const r = post.ride || {};
   const parts = [
     `Ride confirmed: ${r.from || 'NIT Raipur'} → ${r.destination}.`,
@@ -709,7 +905,7 @@ function buildCloseMessage(post) {
   return parts.join(' ');
 }
 
-function buildCancelMessage(post, actor) {
+function buildRideCancelMessage(post, actor) {
   const r = post.ride || {};
   const departure = formatDeparture(r.departureTime);
   return (
@@ -719,8 +915,40 @@ function buildCancelMessage(post, actor) {
   );
 }
 
-exports.closeRide  = endRide('close');
-exports.cancelRide = endRide('cancel');
+/**
+ * The close message carries everything a member needs to follow through,
+ * because the post it came from is about to leave the feed. "Your order is
+ * confirmed" alone would send them hunting for a restaurant name and a drop
+ * point that no longer exist anywhere they can reach.
+ */
+function buildFoodCloseMessage(post) {
+  const f = post.food || {};
+  const parts = [`Food split confirmed: ordering from ${f.restaurant}.`];
+
+  const when = formatDeparture(f.orderTime);
+  if (when) parts.push(`Order goes in at ${when} IST.`);
+  if (f.dropLocation) parts.push(`Drop at ${f.dropLocation}.`);
+  if (f.cuisine) parts.push(`${f.cuisine}.`);
+  if (post.totalFare) parts.push(`Total ₹${post.totalFare} to split.`);
+
+  parts.push('The chat stays open — settle your items and payment there.');
+  return parts.join(' ');
+}
+
+function buildFoodCancelMessage(post, actor) {
+  const f = post.food || {};
+  const when = formatDeparture(f.orderTime);
+  return (
+    `Food split cancelled: ${f.restaurant}` +
+    (when ? ` (${when} IST)` : '') +
+    `. ${actor.displayName} called it off, so please make other plans.`
+  );
+}
+
+exports.closeRide       = endSplit('ride', 'close');
+exports.cancelRide      = endSplit('ride', 'cancel');
+exports.closeFoodSplit  = endSplit('food', 'close');
+exports.cancelFoodSplit = endSplit('food', 'cancel');
 
 // ── PATCH /api/posts/:id/sold ────────────────────────────────────────────────
 /**
