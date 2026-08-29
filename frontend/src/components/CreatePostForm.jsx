@@ -3,8 +3,9 @@
  */
 
 import React, { useState, useRef, useCallback } from 'react';
-import { X, Image, Hash, Clock, AtSign } from 'lucide-react';
+import { X, Image, Hash, Clock, AtSign, Upload, X as XIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { uploadImage, UploadNotConfiguredError, deleteUpload } from '../utils/uploadMedia';
 import api from '../utils/api';
 
 const HASHTAGS = ['None', '#foodsplit', '#resell', '#lost', '#found'];
@@ -21,6 +22,13 @@ const HASHTAG_COLORS = {
 
 const CreatePostForm = ({ onPostCreated, onClose, isClubOrAdmin = false }) => {
   const [form, setForm] = useState({ title: '', description: '', imageUrl: '', hashtag: '', expiresAt: '', customTagsStr: '', totalFare: '', linkedEvent: '' });
+  // Upload state. publicId is tracked so an image the user uploads and then
+  // removes before posting can be destroyed instead of orphaned.
+  const [imagePublicId, setImagePublicId] = useState(null);
+  const [uploadPct,  setUploadPct]  = useState(null);   // null = not uploading
+  const [uploadErr,  setUploadErr]  = useState('');
+  const [canUpload,  setCanUpload]  = useState(true);   // false once the server says 503
+  const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
   const [upcomingEvents, setUpcomingEvents] = useState([]);
@@ -41,6 +49,41 @@ const CreatePostForm = ({ onPostCreated, onClose, isClubOrAdmin = false }) => {
   const [showMentions, setShowMentions]     = useState(false);
   const mentionTimer = useRef(null);
   const descRef      = useRef(null);
+
+  // ── Image upload ─────────────────────────────────────────────────────────
+  const handleFilePick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';           // let the same file be re-picked after an error
+    if (!file) return;
+
+    setUploadErr('');
+    setUploadPct(0);
+    try {
+      const { url, publicId } = await uploadImage(file, 'post', setUploadPct);
+      // Replacing an existing upload: drop the old one rather than orphan it.
+      if (imagePublicId) deleteUpload(imagePublicId);
+      setForm(p => ({ ...p, imageUrl: url }));
+      setImagePublicId(publicId);
+    } catch (err) {
+      if (err instanceof UploadNotConfiguredError) {
+        // Server has no Cloudinary credentials. Hide the button and leave the
+        // URL field, which still works.
+        setCanUpload(false);
+        setUploadErr(err.message);
+      } else {
+        setUploadErr(err.message);
+      }
+    } finally {
+      setUploadPct(null);
+    }
+  };
+
+  const clearImage = () => {
+    if (imagePublicId) deleteUpload(imagePublicId);
+    setImagePublicId(null);
+    setForm(p => ({ ...p, imageUrl: '' }));
+    setUploadErr('');
+  };
 
   const handleChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
 
@@ -109,6 +152,7 @@ const CreatePostForm = ({ onPostCreated, onClose, isClubOrAdmin = false }) => {
         hashtag: form.hashtag || 'None',
         customTags,
         ...(form.imageUrl.trim() && { imageUrl: form.imageUrl.trim() }),
+        ...(imagePublicId && { imagePublicId }),
         ...(TIMED.has(form.hashtag) && { expiresAt: form.expiresAt }),
         ...(form.hashtag === '#cabsplit' && form.totalFare && { totalFare: Number(form.totalFare) }),
         ...(form.linkedEvent && { linkedEvent: form.linkedEvent }),
@@ -202,16 +246,57 @@ const CreatePostForm = ({ onPostCreated, onClose, isClubOrAdmin = false }) => {
           </div>
 
           <div className="border-t border-gray-100 pt-4 space-y-3">
-            {/* Image URL */}
-            <div className="flex items-center gap-3">
-              <Image className="w-5 h-5 text-gray-400 flex-shrink-0" strokeWidth={1.8} />
-              <input
-                className="flex-1 text-sm text-gray-700 placeholder-gray-400 outline-none bg-transparent"
-                name="imageUrl"
-                value={form.imageUrl}
-                onChange={handleChange}
-                placeholder="Add image URL (optional)"
-              />
+            {/* Image: upload or paste a URL */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Image className="w-5 h-5 text-gray-400 flex-shrink-0" strokeWidth={1.8} />
+                <input
+                  className="flex-1 text-sm text-gray-700 placeholder-gray-400 outline-none bg-transparent"
+                  name="imageUrl"
+                  value={form.imageUrl}
+                  onChange={(e) => { setImagePublicId(null); handleChange(e); }}
+                  placeholder={canUpload ? 'Paste an image URL, or upload below' : 'Add image URL (optional)'}
+                />
+                {form.imageUrl && (
+                  <button type="button" onClick={clearImage} title="Remove image"
+                          className="p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+                    <XIcon className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {canUpload && (
+                <div className="pl-8">
+                  <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+                         onChange={handleFilePick} className="hidden" />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadPct !== null}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg
+                               border border-gray-200 text-gray-600 hover:border-gray-900 hover:text-gray-900
+                               disabled:opacity-50 transition-colors"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    {uploadPct !== null ? `Uploading ${uploadPct}%` : 'Upload from device'}
+                  </button>
+                </div>
+              )}
+
+              {uploadPct !== null && (
+                <div className="ml-8 h-1 rounded-full bg-gray-100 overflow-hidden">
+                  <div className="h-full bg-gray-900 transition-all duration-150"
+                       style={{ width: `${uploadPct}%` }} />
+                </div>
+              )}
+
+              {uploadErr && <p className="ml-8 text-xs text-red-500">{uploadErr}</p>}
+
+              {form.imageUrl && uploadPct === null && (
+                <img src={form.imageUrl} alt="preview"
+                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                     className="ml-8 max-h-44 rounded-lg border border-gray-200 object-cover" />
+              )}
             </div>
 
             {/* Custom tags */}

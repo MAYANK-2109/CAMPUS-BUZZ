@@ -35,6 +35,7 @@ const { protect }                       = require('../middleware/auth');
 const { requireRole, adminOnly, clubOrAdmin } = require('../middleware/rbac');
 const { moderatePost }                  = require('../middleware/moderate');
 const findBot                           = require('../utils/findBot');
+const cloudinaryUtil                    = require('../utils/cloudinary');
 
 // ── Controller imports ────────────────────────────────────────────────────────
 const authController          = require('../controllers/authController');
@@ -104,6 +105,52 @@ router.get('/posts/:id',  protect, postController.getPostById);
 // abuse" bypasses the whole pipeline in one step.
 router.patch('/posts/:id',  protect, moderatePost, postController.updatePost);
 router.delete('/posts/:id', protect, postController.deletePost);
+
+// ── Media (Cloudinary) ───────────────────────────────────────────────────────
+// The browser uploads straight to Cloudinary; this endpoint only signs the
+// request. See utils/cloudinary.js for why the file never passes through here.
+router.post('/media/signature', protect, (req, res) => {
+  try {
+    if (!cloudinaryUtil.isConfigured()) {
+      return res.status(503).json({
+        success: false,
+        message: 'Image upload is not configured on this server. You can still paste an image URL.',
+      });
+    }
+
+    const kind = req.body?.kind === 'avatar' ? 'avatar' : 'post';
+    return res.status(200).json({
+      success: true,
+      data: cloudinaryUtil.signUpload(kind, req.user._id.toString()),
+    });
+  } catch (err) {
+    console.error('[media/signature]', err);
+    return res.status(500).json({ success: false, message: 'Could not prepare the upload.' });
+  }
+});
+
+// Delete an uploaded asset. Scoped to the caller: the public_id is prefixed
+// with the uploader's id at signing time, so ownership is checked by comparing
+// that prefix rather than trusting the client.
+router.delete('/media', protect, async (req, res) => {
+  try {
+    const { publicId } = req.body || {};
+    if (!publicId || typeof publicId !== 'string') {
+      return res.status(400).json({ success: false, message: 'publicId is required.' });
+    }
+
+    const uploaderId = publicId.split('/').pop().split('_')[0];
+    if (uploaderId !== req.user._id.toString() && req.user.role !== 'Admin') {
+      return res.status(403).json({ success: false, message: 'You can only delete your own uploads.' });
+    }
+
+    const ok = await cloudinaryUtil.destroyAsset(publicId);
+    return res.status(200).json({ success: true, deleted: ok });
+  } catch (err) {
+    console.error('[media/delete]', err);
+    return res.status(500).json({ success: false, message: 'Could not delete the image.' });
+  }
+});
 
 // ── Find BOT ─────────────────────────────────────────────────────────────────
 // Plain-language request in, navigation buttons out. Pure keyword routing —

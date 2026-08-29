@@ -20,6 +20,7 @@ const Notification = require('../models/Notification');
 const ChatRoom     = require('../models/ChatRoom');
 const { emitNotifications } = require('../socket');
 const { extractKeywords, runLostFoundMatch } = require('../utils/lostFoundMatcher');
+const { destroyAsset, isOwnAssetUrl }        = require('../utils/cloudinary');
 
 // ── Allowed time-sensitive hashtags that need an expiresAt ───────────────────
 const TIMED_HASHTAGS = new Set(['#foodsplit', '#cabsplit']);
@@ -379,7 +380,16 @@ exports.joinRide = async (req, res) => {
 // ── POST /api/posts ───────────────────────────────────────────────────────────
 exports.createPost = async (req, res) => {
   try {
-    let { title, description, imageUrl, hashtag, expiresAt, customTags, totalFare, ride } = req.body;
+    let { title, description, imageUrl, imagePublicId, hashtag, expiresAt, customTags, totalFare, ride } = req.body;
+
+    /**
+     * imagePublicId is only meaningful for images we actually hosted. The
+     * client reports it after uploading, and a client report is not evidence —
+     * so it is kept only when the URL really points at our own Cloudinary
+     * account. Otherwise a pasted URL could arrive with a public_id attached
+     * and later have deletePost destroy an unrelated asset.
+     */
+    if (imagePublicId && !isOwnAssetUrl(imageUrl)) imagePublicId = null;
 
     // imageUrl is optional — posts without an image render as text-only.
 
@@ -461,7 +471,8 @@ exports.createPost = async (req, res) => {
     const post = await Post.create({
       title,
       description,
-      imageUrl:   imageUrl?.trim() || null,
+      imageUrl:      imageUrl?.trim() || null,
+      imagePublicId: imagePublicId || null,
       author:     req.user._id,
       hashtag:    hashtag,
       customTags: Array.isArray(customTags) ? customTags : [],
@@ -604,6 +615,9 @@ exports.markPostSold = async (req, res) => {
     // ── 2. Remove the listing from the feed ──────────────────────────────────
     post.isActive = false;
     await post.save();
+
+    // A sold item's photo has no further use.
+    if (post.imagePublicId) destroyAsset(post.imagePublicId);
 
     // ── 3. Tell the room, then tell the participants ─────────────────────────
     const io = global._io;
@@ -797,12 +811,23 @@ exports.updatePost = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorised to update this post.' });
     }
 
+    // Swapping the image out leaves the old upload orphaned unless it is
+    // destroyed here. Captured before the field is overwritten.
+    const previousPublicId = post.imagePublicId;
+    const imageChanged =
+      req.body.imageUrl !== undefined && req.body.imageUrl !== post.imageUrl;
+
     const allowedFields = ['title', 'description', 'imageUrl', 'hashtag', 'expiresAt', 'customTags', 'totalFare'];
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) {
         post[field] = req.body[field];
       }
     });
+
+    if (imageChanged) {
+      post.imagePublicId = isOwnAssetUrl(req.body.imageUrl) ? (req.body.imagePublicId || null) : null;
+      if (previousPublicId && previousPublicId !== post.imagePublicId) destroyAsset(previousPublicId);
+    }
 
     // Keywords are derived from title + description, so an edit that changes
     // either must refresh them. Without this a corrected post ("blue" → "black")
@@ -856,6 +881,10 @@ exports.deletePost = async (req, res) => {
     // Soft-delete: preserves chat history
     post.isActive = false;
     await post.save();
+
+    // The post row survives, but the image does not need to. Fire-and-forget:
+    // a failed image delete must not fail the delete the user asked for.
+    if (post.imagePublicId) destroyAsset(post.imagePublicId);
 
     return res.status(200).json({ success: true, message: 'Post deactivated.' });
   } catch (err) {

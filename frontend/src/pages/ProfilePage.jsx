@@ -4,10 +4,11 @@
  * Own-user profile page: edit bio, view own posts, and access private saved posts.
  */
 
-import React, { useState, useEffect } from 'react';
-import { Bookmark, Grid3x3, LogOut, BookOpen, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Bookmark, Grid3x3, LogOut, BookOpen, ChevronRight, Upload } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import { uploadImage, UploadNotConfiguredError, deleteUpload } from '../utils/uploadMedia';
 import { useAuth } from '../context/AuthContext';
 import PostCard from '../components/PostCard';
 
@@ -17,6 +18,35 @@ const ProfilePage = () => {
   
   const [activeTab,    setActiveTab]   = useState('posts');
   const [editing,      setEditing]     = useState(false);
+  // Avatar upload. avatarPublicId tracks the current upload so replacing an
+  // avatar destroys the previous one — avatars change far more often than post
+  // images, so this is where orphans would pile up fastest.
+  const [avatarPublicId, setAvatarPublicId] = useState(null);
+  const [avatarPct, setAvatarPct] = useState(null);
+  const [avatarErr, setAvatarErr] = useState('');
+  const [canUploadAvatar, setCanUploadAvatar] = useState(true);
+  const avatarInputRef = useRef(null);
+
+  const handleAvatarPick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setAvatarErr('');
+    setAvatarPct(0);
+    try {
+      const { url, publicId } = await uploadImage(file, 'avatar', setAvatarPct);
+      if (avatarPublicId) deleteUpload(avatarPublicId);
+      setForm(p => ({ ...p, avatarUrl: url }));
+      setAvatarPublicId(publicId);
+    } catch (err) {
+      if (err instanceof UploadNotConfiguredError) setCanUploadAvatar(false);
+      setAvatarErr(err.message);
+    } finally {
+      setAvatarPct(null);
+    }
+  };
+
   const [form, setForm] = useState({
     displayName: user?.displayName || '',
     bio: user?.bio || '',
@@ -76,7 +106,7 @@ const ProfilePage = () => {
     e.preventDefault();
     setSaving(true);
     try {
-      const { data } = await api.patch('/users/profile', form);
+      const { data } = await api.patch('/users/profile', { ...form, ...(avatarPublicId && { avatarPublicId }) });
       const currentToken = localStorage.getItem('cb_token');
       login(data.data, currentToken);
       setEditing(false);
@@ -184,8 +214,32 @@ const ProfilePage = () => {
                 <textarea className="input-base resize-none" rows={3} maxLength={150} value={form.bio} onChange={(e) => setForm(p => ({ ...p, bio: e.target.value }))} placeholder="Tell us about yourself..." />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Avatar URL (Optional)</label>
-                <input className="input-base" value={form.avatarUrl} onChange={(e) => setForm(p => ({ ...p, avatarUrl: e.target.value }))} placeholder="https://..." />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Avatar</label>
+                <div className="flex items-center gap-3">
+                  {form.avatarUrl && (
+                    <img src={form.avatarUrl} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                         className="w-12 h-12 rounded-full object-cover border border-gray-200 flex-shrink-0" />
+                  )}
+                  <input className="input-base flex-1" value={form.avatarUrl}
+                         onChange={(e) => { setAvatarPublicId(null); setForm(p => ({ ...p, avatarUrl: e.target.value })); }}
+                         placeholder="https://... or upload" />
+                </div>
+
+                {canUploadAvatar && (
+                  <>
+                    <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+                           onChange={handleAvatarPick} className="hidden" />
+                    <button type="button" onClick={() => avatarInputRef.current?.click()}
+                            disabled={avatarPct !== null}
+                            className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg
+                                       border border-gray-300 text-gray-600 hover:border-gray-900 hover:text-gray-900
+                                       disabled:opacity-50 transition-colors">
+                      <Upload className="w-3.5 h-3.5" />
+                      {avatarPct !== null ? `Uploading ${avatarPct}%` : 'Upload from device'}
+                    </button>
+                  </>
+                )}
+                {avatarErr && <p className="mt-1 text-xs text-red-500">{avatarErr}</p>}
               </div>
               <div className="flex gap-3 mt-5">
                 <button type="button" onClick={() => { setEditing(false); setShowPasswordForm(false); }} className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 flex-1">Cancel</button>

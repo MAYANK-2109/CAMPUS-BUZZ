@@ -12,11 +12,12 @@
  */
 
 const User = require('../models/User');
+const { destroyAsset, isOwnAssetUrl } = require('../utils/cloudinary');
 
 // ── PATCH /api/users/profile ─────────────────────────────────────────────────
 exports.updateProfile = async (req, res) => {
   try {
-    const { displayName, bio, avatarUrl } = req.body;
+    const { displayName, bio, avatarUrl, avatarPublicId } = req.body;
 
     const user = await User.findById(req.user._id);
     if (!user) {
@@ -25,7 +26,27 @@ exports.updateProfile = async (req, res) => {
 
     if (displayName !== undefined) user.displayName = displayName;
     if (bio !== undefined) user.bio = bio;
-    if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
+
+    /**
+     * Swapping the avatar destroys the one it replaces. Avatars change far more
+     * often than post images, so this is where orphaned uploads would otherwise
+     * accumulate fastest.
+     *
+     * avatarPublicId is only trusted when the URL really points at our own
+     * Cloudinary account — the client reports it, and a client report is not
+     * evidence. A pasted URL arriving with a public_id attached must not later
+     * let us destroy an unrelated asset.
+     */
+    if (avatarUrl !== undefined && avatarUrl !== user.avatarUrl) {
+      const previousPublicId = user.avatarPublicId;
+
+      user.avatarUrl      = avatarUrl;
+      user.avatarPublicId = isOwnAssetUrl(avatarUrl) ? (avatarPublicId || null) : null;
+
+      if (previousPublicId && previousPublicId !== user.avatarPublicId) {
+        destroyAsset(previousPublicId);   // fire-and-forget
+      }
+    }
 
     await user.save();
 

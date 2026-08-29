@@ -82,6 +82,18 @@ const UserSchema = new mongoose.Schema(
       default: null,
     },
 
+    /**
+     * Cloudinary public_id for avatarUrl. Kept so the previous avatar can be
+     * destroyed when a new one replaces it — an avatar is changed far more
+     * often than a post image, so without this the orphan count grows fastest
+     * here. Null for pasted URLs.
+     */
+    avatarPublicId: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
     // Follow system: students follow clubs; clubs accumulate followers
     followers: [
       { type: mongoose.Schema.Types.ObjectId, ref: 'User' }

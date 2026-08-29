@@ -76,6 +76,20 @@ const PostSchema = new mongoose.Schema(
       default: null,
     },
 
+    /**
+     * Cloudinary public_id for imageUrl, when the image was uploaded rather
+     * than pasted. Stored because a URL alone cannot be deleted — without it
+     * every image whose post is removed stays on the Cloudinary account
+     * forever and the free tier fills with orphans.
+     *
+     * Null for pasted URLs, which we did not upload and must not delete.
+     */
+    imagePublicId: {
+      type:    String,
+      trim:    true,
+      default: null,
+    },
+
     author: {
       type:     mongoose.Schema.Types.ObjectId,
       ref:      'User',
