@@ -545,6 +545,86 @@
 .ch-sold-room-btn:hover    { background: #bbf7d0; }
 .ch-sold-room-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   FIND BOT
+   ───────────────────────────────────────────────────────────────────────────
+   Positioning lives here rather than in Tailwind classes because it needs
+   env() and dvh, which arbitrary-value syntax handles badly.
+
+   Two constraints drive all of it:
+
+   1. Navbar renders a fixed bottom tab bar on mobile (md:hidden, bottom-0,
+      z-50, min-height 56px plus the safe-area inset). Anything pinned to
+      bottom-6 on a phone sits UNDERNEATH it — which is exactly where the
+      launcher was hiding. Everything below clears --fb-nav-h on small screens
+      and drops back to a normal corner offset from md up, where that bar is
+      gone.
+
+   2. Mobile browser chrome makes vh unreliable — 100vh is the height WITH the
+      address bar retracted, so a panel sized in vh gets clipped at the bottom
+      while the bar is showing. dvh tracks the visible viewport; the vh line
+      before it is the fallback for browsers without dvh.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --fb-nav-h: 56px;                       /* mobile bottom tab bar */
+  --fb-safe:  env(safe-area-inset-bottom, 0px);
+  --fb-gap:   0.75rem;
+}
+
+.fb-launcher {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(var(--fb-nav-h) + var(--fb-safe) + var(--fb-gap));
+  z-index: 45;                            /* under the tab bar, above content */
+}
+
+/* On the narrowest phones the pill crowds the tab bar underneath it, so the
+   label drops and the bot icon carries the meaning. Handled here rather than
+   with an `xs:` Tailwind variant — this project has no xs breakpoint defined,
+   so such a class would silently never match and hide the label everywhere. */
+.fb-launcher-label { display: none; }
+@media (min-width: 380px) {
+  .fb-launcher-label { display: inline; }
+}
+
+.fb-panel {
+  position: fixed;
+  z-index: 60;                            /* above the tab bar while open */
+  display: flex;
+  flex-direction: column;
+
+  /* Phones: a near-fullscreen sheet. A 23rem floating card on a 360px screen
+     leaves unusable margins and a cramped message column. */
+  left:  var(--fb-gap);
+  right: var(--fb-gap);
+  top:   var(--fb-gap);
+  bottom: calc(var(--fb-nav-h) + var(--fb-safe) + var(--fb-gap));
+}
+
+/* Small tablets and up: back to a floating panel in the corner. */
+@media (min-width: 640px) {
+  .fb-panel {
+    left: auto;
+    top: auto;
+    right: 1.5rem;
+    width: 23rem;
+    height: min(80vh, 32rem);
+    height: min(80dvh, 32rem);
+  }
+}
+
+/* md+ : the mobile tab bar is gone, so reclaim the space it was reserving. */
+@media (min-width: 768px) {
+  .fb-launcher { right: 1.5rem; bottom: 1.5rem; }
+  .fb-panel    { bottom: 1.5rem; }
+}
+
+/* Landscape phones are short enough that a fixed 32rem panel overflows. */
+@media (max-height: 480px) and (min-width: 640px) {
+  .fb-panel { height: calc(100dvh - 2 * var(--fb-gap)); top: var(--fb-gap); bottom: var(--fb-gap); }
+}
+
 /* ── Messages list */
 .ch-messages {
   flex: 1;

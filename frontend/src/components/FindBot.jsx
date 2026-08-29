@@ -91,21 +91,22 @@ const FindBot = () => {
         <button
           onClick={() => setOpen(true)}
           aria-label="Open Find BOT"
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 pl-4 pr-5 py-3 rounded-full
+          className="fb-launcher flex items-center gap-2 pl-4 pr-5 py-3 rounded-full
                      bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-lg
                      hover:shadow-xl hover:from-teal-700 hover:to-cyan-700
                      active:scale-95 transition-all"
         >
           <Bot className="w-5 h-5" />
-          <span className="text-sm font-bold">Find BOT</span>
+          {/* The label is hidden on the narrowest phones, where a pill this wide
+              crowds the tab bar underneath it. The icon still reads as a bot. */}
+          <span className="fb-launcher-label text-sm font-bold">Find BOT</span>
         </button>
       )}
 
       {open && (
-        <div className="fixed bottom-6 right-6 z-40 w-[min(92vw,23rem)] h-[min(80vh,32rem)]
-                        flex flex-col rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden">
+        <div className="fb-panel rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden">
 
-          <div className="flex items-center justify-between px-4 py-3
+          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3
                           bg-gradient-to-r from-teal-600 to-cyan-600 text-white">
             <div className="flex items-center gap-2">
               <Bot className="w-5 h-5" />
@@ -120,7 +121,7 @@ const FindBot = () => {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 bg-gray-50">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 space-y-3 bg-gray-50">
             {messages.map((m, i) => (
               <div key={i} className={m.from === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                 <div className={m.from === 'user' ? 'max-w-[85%]' : 'max-w-[85%] w-full'}>
@@ -185,14 +186,18 @@ const FindBot = () => {
           </div>
 
           <form onSubmit={(e) => { e.preventDefault(); send(); }}
-                className="flex items-center gap-2 p-3 border-t border-gray-200 bg-white">
+                className="flex-shrink-0 flex items-center gap-2 p-3 border-t border-gray-200 bg-white"
+                style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
             <input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               maxLength={500}
               placeholder="What are you looking for?"
-              className="flex-1 min-w-0 px-3 py-2 text-sm rounded-full bg-gray-100 border border-transparent
+              /* 16px: iOS Safari zooms the whole page when a focused input is
+                 smaller, and the zoom is not undone on blur. */
+              style={{ fontSize: '16px' }}
+              className="flex-1 min-w-0 px-3 py-2 rounded-full bg-gray-100 border border-transparent
                          focus:bg-white focus:border-teal-400 focus:outline-none transition-colors"
             />
             <button type="submit" disabled={!input.trim() || busy} aria-label="Send"
