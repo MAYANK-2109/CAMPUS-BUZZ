@@ -1,0 +1,486 @@
+.imap-page {
+  --imap-ink: #172033;
+  --imap-muted: #687386;
+  --imap-line: rgba(148, 163, 184, 0.26);
+  --imap-indigo: #5558a9;
+  --imap-indigo-soft: rgba(85, 88, 169, 0.09);
+  min-height: 100vh;
+  padding: 28px clamp(16px, 3vw, 42px) 48px;
+  color: var(--imap-ink);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(99, 102, 241, 0.045), transparent 31rem),
+    radial-gradient(circle at 95% 12%, rgba(14, 165, 233, 0.028), transparent 28rem),
+    #f7f8fa;
+}
+
+.imap-header,
+.imap-layout {
+  width: min(1240px, 100%);
+  margin-inline: auto;
+}
+
+.imap-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.imap-header h1 {
+  margin: 6px 0 3px;
+  font-size: clamp(25px, 3vw, 36px);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  font-weight: 800;
+}
+
+.imap-header p {
+  margin: 0;
+  color: var(--imap-muted);
+  font-size: 14px;
+}
+
+.imap-kicker,
+.imap-access {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #4f518f;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.105em;
+}
+
+.imap-access {
+  flex-shrink: 0;
+  padding: 8px 11px;
+  border: 1px solid rgba(85, 88, 169, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #646b7a;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 650;
+}
+
+.imap-layout {
+  display: grid;
+  grid-template-columns: minmax(285px, 330px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.imap-panel,
+.imap-map-card {
+  border: 1px solid rgba(226, 232, 240, 0.94);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.99), rgba(251, 251, 253, 0.97));
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.055);
+}
+
+.imap-panel {
+  position: sticky;
+  top: 18px;
+  overflow: visible;
+  padding: 14px;
+}
+
+.imap-floor-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #f1f3f6;
+}
+
+.imap-floor-tabs button {
+  min-width: 0;
+  padding: 7px 4px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #7a8493;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.imap-floor-tabs button:hover { color: #363b67; }
+.imap-floor-tabs button.active {
+  color: #303363;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 7px rgba(30, 41, 59, 0.08);
+}
+
+.imap-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 4px 14px;
+}
+
+.imap-panel-title small,
+.imap-point small,
+.imap-floor-route small {
+  display: block;
+  color: #98a1af;
+  font-size: 9px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.imap-panel-title h2 {
+  margin: 2px 0 1px;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.imap-panel-title p {
+  margin: 0;
+  color: var(--imap-muted);
+  font-size: 11.5px;
+}
+
+.imap-panel-title > svg { color: #9aa3b1; }
+
+.imap-route-picker {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.imap-point {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--imap-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--imap-ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.imap-point:hover,
+.imap-point.active {
+  border-color: rgba(85, 88, 169, 0.38);
+  background: rgba(248, 248, 255, 0.9);
+}
+
+.imap-point.active { box-shadow: 0 0 0 3px rgba(85, 88, 169, 0.065); }
+.imap-point strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 1px;
+  color: #30374a;
+  font-size: 12px;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.imap-point > svg { color: #9aa3b1; }
+
+.imap-point .dot {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 9px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+.imap-point .dot-a { background: #565a9e; }
+.imap-point .dot-b { background: #d36f7d; }
+
+.imap-swap {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  right: 12px;
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--imap-line);
+  border-radius: 50%;
+  background: #fff;
+  color: #717b8c;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+.imap-swap:disabled { opacity: 0.45; cursor: default; }
+
+.imap-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 11px;
+  border: 1px solid var(--imap-line);
+  border-radius: 11px;
+  background: rgba(248, 250, 252, 0.86);
+  color: #9aa3b1;
+}
+.imap-search:focus-within {
+  border-color: rgba(85, 88, 169, 0.38);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(85, 88, 169, 0.06);
+}
+.imap-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #343b4d;
+  font-size: 12px;
+}
+.imap-search input::placeholder { color: #a2aab7; }
+
+.imap-results {
+  position: absolute;
+  z-index: 20;
+  right: 14px;
+  left: 14px;
+  max-height: 230px;
+  overflow-y: auto;
+  margin-top: 5px;
+  padding: 5px;
+  border: 1px solid var(--imap-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.13);
+}
+.imap-results button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #4d5668;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.imap-results button:hover { background: #f5f6fa; }
+.imap-results button svg { color: #696ca9; }
+.imap-results button small { color: #9aa3b1; }
+.imap-results p { margin: 8px; color: var(--imap-muted); font-size: 12px; }
+
+.imap-room-select {
+  display: block;
+  margin-top: 12px;
+}
+.imap-room-select > span {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 2px 5px;
+  color: #7b8594;
+  font-size: 10.5px;
+  font-weight: 650;
+}
+.imap-room-select b { color: #555a89; }
+.imap-room-select select {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--imap-line);
+  border-radius: 10px;
+  outline: 0;
+  background: #fff;
+  color: #4b5567;
+  font-size: 11.5px;
+}
+
+.imap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 14px;
+  padding: 14px 3px 5px;
+  color: #7d8796;
+  font-size: 10px;
+}
+.imap-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.imap-legend i { display: inline-block; width: 14px; height: 5px; border-radius: 999px; }
+.imap-legend .legend-route { background: #5b5fa8; }
+.imap-legend .legend-room { border: 1px solid rgba(85, 88, 169, 0.42); background: rgba(85, 88, 169, 0.1); }
+.imap-legend .legend-landmark { border: 1px solid rgba(14, 116, 144, 0.34); background: rgba(14, 165, 233, 0.08); }
+
+.imap-tip,
+.imap-summary,
+.imap-floor-route {
+  margin-top: 10px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.imap-tip,
+.imap-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px;
+}
+.imap-tip { border: 1px solid rgba(85, 88, 169, 0.12); background: rgba(85, 88, 169, 0.05); color: #656d7d; }
+.imap-tip svg { flex-shrink: 0; color: #62669e; }
+.imap-summary { border: 1px solid rgba(16, 185, 129, 0.16); background: rgba(236, 253, 245, 0.68); color: #41645b; }
+.imap-summary svg { flex-shrink: 0; color: #2a8b72; }
+.imap-summary strong,
+.imap-summary span { display: block; }
+.imap-summary strong { color: #284c43; font-size: 12px; }
+.imap-summary span { margin-top: 1px; color: #628178; font-size: 10.5px; }
+
+.imap-floor-route {
+  padding: 11px;
+  border: 1px solid rgba(85, 88, 169, 0.13);
+  background: rgba(248, 248, 255, 0.76);
+}
+.imap-floor-route > div { display: flex; align-items: center; gap: 5px; margin-top: 6px; }
+.imap-floor-route button {
+  padding: 4px 7px;
+  border: 1px solid rgba(85, 88, 169, 0.18);
+  border-radius: 7px;
+  background: #fff;
+  color: #65698f;
+  font-size: 9.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.imap-floor-route button.active { color: #fff; background: #575b98; }
+.imap-floor-route p { margin: 7px 0 0; color: #717a89; font-size: 10.5px; }
+
+.imap-map-card { overflow: hidden; }
+.imap-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 15px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.88);
+}
+.imap-toolbar strong,
+.imap-toolbar span { display: block; }
+.imap-toolbar strong { font-size: 12.5px; }
+.imap-toolbar span { margin-top: 1px; color: #929baa; font-size: 10.5px; }
+
+.imap-tools { display: flex; align-items: center; gap: 5px; }
+.imap-tools button {
+  display: grid;
+  min-width: 30px;
+  height: 29px;
+  place-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--imap-line);
+  border-radius: 8px;
+  background: #fff;
+  color: #697386;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.imap-tools button:hover { border-color: rgba(85, 88, 169, 0.28); color: #4f518f; background: #fafaff; }
+.imap-tools button svg { width: 14px; height: 14px; }
+.imap-tools button.reset { min-width: 46px; }
+
+.imap-canvas {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #ebe9e2;
+  isolation: isolate;
+}
+.imap-canvas svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: center;
+  transition: transform 220ms ease;
+}
+
+.imap-zone { outline: none; }
+.imap-zone rect {
+  fill: rgba(85, 88, 169, 0.025);
+  stroke: rgba(85, 88, 169, 0.14);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+  transition: fill 150ms ease, stroke 150ms ease;
+}
+.imap-zone--hotspot { cursor: pointer; }
+.imap-zone--hotspot:hover rect,
+.imap-zone--hotspot:focus rect {
+  fill: rgba(85, 88, 169, 0.12);
+  stroke: rgba(85, 88, 169, 0.7);
+  stroke-width: 2;
+}
+.imap-zone--start rect { fill: rgba(85, 88, 169, 0.15); stroke: #5558a9; }
+.imap-zone--end rect { fill: rgba(211, 111, 125, 0.15); stroke: #c55f70; }
+
+.imap-route {
+  fill: none;
+  stroke: #5558a9;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 10 7;
+  animation: imap-route-flow 1.2s linear infinite;
+}
+@keyframes imap-route-flow { to { stroke-dashoffset: -34; } }
+
+.imap-pin circle { stroke: #fff; stroke-width: 3; vector-effect: non-scaling-stroke; }
+.imap-pin text { fill: #fff; font-size: 12px; font-weight: 800; pointer-events: none; }
+.imap-pin--start circle { fill: #5558a9; }
+.imap-pin--end circle { fill: #c55f70; }
+.imap-transfer circle { fill: #fff; stroke: #6b6fa8; stroke-width: 3; vector-effect: non-scaling-stroke; }
+.imap-transfer text { fill: #5558a9; font-size: 14px; font-weight: 800; }
+
+.imap-map-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(226, 232, 240, 0.86);
+  color: #7f8998;
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+.imap-map-note svg { flex-shrink: 0; color: #686ca2; }
+
+@media (max-width: 1024px) {
+  .imap-layout { grid-template-columns: 1fr; }
+  .imap-panel { position: static; }
+}
+
+@media (max-width: 640px) {
+  .imap-page { padding: 20px 12px 88px; }
+  .imap-header { align-items: flex-start; margin-bottom: 15px; }
+  .imap-access span { display: none; }
+  .imap-access { padding: 8px; }
+  .imap-panel,
+  .imap-map-card { border-radius: 16px; }
+  .imap-toolbar { align-items: flex-start; padding: 11px 12px; }
+  .imap-tools { flex-wrap: wrap; justify-content: flex-end; }
+  .imap-tools button.reset { display: none; }
+  .imap-map-note { align-items: flex-start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imap-canvas svg { transition: none; }
+  .imap-route { animation: none; }
+}

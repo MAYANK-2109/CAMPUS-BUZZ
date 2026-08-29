@@ -3,6 +3,7 @@ import {
   Accessibility, ArrowLeftRight, ChevronDown, DoorOpen, LocateFixed,
   MapPin, Navigation, RotateCcw, RotateCw, Search, Sparkles, X,
 } from 'lucide-react';
+import './IndoorMapPage.css';
 
 const room = (id, label, x, y, w, h, icon = 'room', kind = 'room') => ({ id, label, x, y, w, h, icon, kind });
 

@@ -6,15 +6,7 @@
  */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MapPin, Navigation, WifiOff } from 'lucide-react';
-
-const ensureLeafletCSS = () => {
-  if (document.getElementById('leaflet-css')) return;
-  const link = document.createElement('link');
-  link.id = 'leaflet-css';
-  link.rel = 'stylesheet';
-  link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-  document.head.appendChild(link);
-};
+import 'leaflet/dist/leaflet.css';
 
 const CabTracker = ({ postId, isAuthor, socket }) => {
   const [sharing, setSharing] = useState(false);
@@ -30,7 +22,6 @@ const CabTracker = ({ postId, isAuthor, socket }) => {
   const LRef = useRef(null);
 
   useEffect(() => {
-    ensureLeafletCSS();
     import('leaflet').then(mod => {
       LRef.current = mod.default || mod;
       setLeafletReady(true);
