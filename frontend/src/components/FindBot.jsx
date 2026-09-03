@@ -91,14 +91,8 @@ const FindBot = () => {
         <button
           onClick={() => setOpen(true)}
           aria-label="Open Find BOT"
-<<<<<<< Updated upstream
           className="fb-launcher flex items-center gap-2 pl-4 pr-5 py-3 rounded-full
-                     bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-lg
-                     hover:shadow-xl hover:from-teal-700 hover:to-cyan-700
-=======
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 pl-4 pr-5 py-3 rounded-full
                      bg-slate-800 text-white shadow-lg hover:bg-slate-700
->>>>>>> Stashed changes
                      active:scale-95 transition-all"
         >
           <Bot className="w-5 h-5" />
@@ -111,12 +105,8 @@ const FindBot = () => {
       {open && (
         <div className="fb-panel rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden">
 
-<<<<<<< Updated upstream
           <div className="flex-shrink-0 flex items-center justify-between px-4 py-3
-                          bg-gradient-to-r from-teal-600 to-cyan-600 text-white">
-=======
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-800 text-white">
->>>>>>> Stashed changes
+                          bg-slate-800 text-white">
             <div className="flex items-center gap-2">
               <Bot className="w-5 h-5" />
               <div>
